@@ -1,0 +1,736 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/forms";
+
+@theme {
+  --font-sans: 'Noto Sans Thai', 'Figtree', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+@layer base {
+
+  html,
+  body,
+  button,
+  input,
+  select,
+  textarea {
+    font-family: 'Noto Sans Thai', 'Figtree', ui-sans-serif, system-ui, sans-serif !important;
+  }
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: #00875a;
+  --primary-foreground: #ffffff;
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: #00875a;
+  --radius: 0.625rem;
+}
+
+/* X-Ray per-page editor: matches the mPDF findings area (16pt, 32.9px lines).
+   Default 25 lines/page; height set dynamically via inline styles. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.xray-page-editor,
+.xray-page-editor * {
+  box-sizing: border-box;
+}
+
+.xray-page-editor {
+  font-family: 'Angsana New', 'Angsana', Tahoma, sans-serif;
+  color: #000;
+  font-size: 16pt;
+  line-height: 32.9px;
+}
+
+.xray-measure {
+  position: absolute !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  left: -9999px !important;
+  top: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  display: block !important;
+}
+
+.xray-measure * {
+  position: static !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+.xray-page-editor>div {
+  overflow: hidden;
+}
+
+.xray-page-editor p,
+.xray-page-editor .ProseMirror p {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 32.9px !important;
+  line-height: 32.9px !important;
+  font-size: 16pt !important;
+}
+
+.xray-page-editor h1 {
+  font-size: 20pt;
+  font-weight: bold;
+  margin: 0;
+  line-height: 32.9px;
+}
+
+.xray-page-editor h2 {
+  font-size: 18pt;
+  font-weight: bold;
+  margin: 0;
+  line-height: 32.9px;
+}
+
+.xray-page-editor h3 {
+  font-size: 16pt;
+  font-weight: bold;
+  margin: 0;
+  line-height: 32.9px;
+}
+
+.xray-page-editor u {
+  text-decoration: underline;
+}
+
+.xray-page-editor ul,
+.xray-page-editor ol {
+  margin: 0;
+  padding-left: 1.4em;
+  line-height: 32.9px;
+}
+
+.xray-page-editor .ProseMirror {
+  outline: none;
+  overflow: visible;
+  height: auto;
+  min-height: 100%;
+  cursor: text;
+}
+
+/* Guard against ProseMirror adding double <br> in empty paragraphs */
+.xray-page-editor .ProseMirror br + br.ProseMirror-trailingBreak,
+.xray-page-editor .ProseMirror br.ProseMirror-trailingBreak:not(:only-child) {
+  display: none !important;
+}
+
+.xray-page-editor .ProseMirror p:empty,
+.xray-page-editor .ProseMirror p:has(> br:only-child) {
+  min-height: 32.9px !important;
+  max-height: 32.9px !important;
+  height: 32.9px !important;
+  line-height: 32.9px !important;
+}
+
+/* Cross-page Ctrl+A: highlight the actual text like a real selection
+   (each page is a separate editor, so the highlight is CSS-driven). */
+.xray-select-all .ProseMirror p {
+  background-color: #accef7;
+  color: #000;
+  border-radius: 2px;
+}
+
+.xray-select-all .ProseMirror {
+  user-select: none;
+  cursor: text;
+}
+
+/* X-Ray Findings Viewer (Preserves whitespace, tabs, font sizes, and rich formatting matching editor) */
+.xray-findings-viewer {
+  font-family: 'Angsana New', 'Angsana', Tahoma, sans-serif;
+  font-size: 16pt;
+  line-height: 32.9px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #000;
+  width: 100%;
+  max-width: 100%;
+}
+
+.xray-findings-viewer p {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 32.9px !important;
+  line-height: 32.9px !important;
+  font-size: 16pt;
+}
+
+.xray-findings-viewer p:empty::before,
+.xray-findings-viewer p>br:only-child::before {
+  content: "\00a0";
+}
+
+.xray-findings-viewer h1 {
+  font-size: 20pt;
+  font-weight: bold;
+  margin: 0;
+  line-height: 32.9px;
+}
+
+.xray-findings-viewer h2 {
+  font-size: 18pt;
+  font-weight: bold;
+  margin: 0;
+  line-height: 32.9px;
+}
+
+.xray-findings-viewer h3 {
+  font-size: 16pt;
+  font-weight: bold;
+  margin: 0;
+  line-height: 32.9px;
+}
+
+.xray-findings-viewer u {
+  text-decoration: underline;
+}
+
+.xray-findings-viewer strong,
+.xray-findings-viewer b {
+  font-weight: bold;
+}
+
+.xray-findings-viewer em,
+.xray-findings-viewer i {
+  font-style: italic;
+}
+
+.xray-findings-viewer ul,
+.xray-findings-viewer ol {
+  margin: 0;
+  padding-left: 1.4em;
+  line-height: 32.9px;
+}
+
+.xray-findings-viewer ul {
+  list-style-type: disc;
+}
+
+.xray-findings-viewer ol {
+  list-style-type: decimal;
+}
+
+.xray-findings-viewer li {
+  line-height: 32.9px;
+}
+
+/* Custom Scrollbar Utilities */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.rose-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.rose-scrollbar::-webkit-scrollbar-track {
+  background: #ffe4e6;
+  border-radius: 4px;
+}
+
+.rose-scrollbar::-webkit-scrollbar-thumb {
+  background: #f43f5e;
+  border-radius: 4px;
+}
+
+.rose-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #e11d48;
+}
+
+/* Radix Dialog & Modal Keyframe Animations (Laravel Breeze Standard) */
+@keyframes dialogOverlayShow {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialogOverlayHide {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialogContentShow {
+  from {
+    opacity: 0;
+    transform: scale(0.93) translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dialogContentHide {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(12px);
+  }
+}
+
+.dialog-overlay-anim[data-state='open'] {
+  animation: dialogOverlayShow 280ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.dialog-overlay-anim[data-state='closed'] {
+  animation: dialogOverlayHide 200ms ease-in forwards;
+}
+
+.dialog-content-anim[data-state='open'] {
+  animation: dialogContentShow 300ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.dialog-content-anim[data-state='closed'] {
+  animation: dialogContentHide 180ms ease-in forwards;
+}
+
+/* Radix Dropdown Menu Keyframe Animations */
+@keyframes dropdownShow {
+  from {
+    opacity: 0;
+    transform: scale(0.94) translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes dropdownHide {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+}
+
+.dropdown-content-anim[data-state='open'] {
+  animation: dropdownShow 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, top left);
+}
+
+.dropdown-content-anim[data-state='closed'] {
+  animation: dropdownHide 150ms ease-in forwards;
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin, top left);
+}
+
+/* 3D Thick Liquid Glassmorphism Design System */
+.liquid-glass-card {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.85) 45%, rgba(241, 245, 249, 0.92) 100%) !important;
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 1) !important;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow:
+    0 24px 48px -12px rgba(15, 23, 42, 0.09),
+    0 10px 24px -6px rgba(15, 23, 42, 0.04),
+    inset 0 2px 2px 0 rgba(255, 255, 255, 0.98),
+    inset 0 -2px 4px 0 rgba(15, 23, 42, 0.05),
+    inset 2px 0 3px 0 rgba(255, 255, 255, 0.9),
+    inset -2px 0 3px 0 rgba(255, 255, 255, 0.4) !important;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+.liquid-glass-card:hover {
+  border-color: rgba(255, 255, 255, 1) !important;
+  box-shadow:
+    0 30px 60px -12px rgba(15, 23, 42, 0.13),
+    0 14px 28px -6px rgba(15, 23, 42, 0.07),
+    inset 0 2.5px 4px 0 rgba(255, 255, 255, 1),
+    inset 0 -2px 4px 0 rgba(15, 23, 42, 0.04) !important;
+}
+
+.liquid-glass-header {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.9) 50%, rgba(255, 255, 255, 0.98) 100%) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(203, 213, 225, 0.7) !important;
+  box-shadow:
+    inset 0 1.5px 0 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 0 0 rgba(15, 23, 42, 0.03) !important;
+}
+
+.liquid-glass-context-menu {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.88) 0%, rgba(248, 250, 252, 0.76) 50%, rgba(241, 245, 249, 0.84) 100%) !important;
+  backdrop-filter: blur(28px) saturate(200%);
+  -webkit-backdrop-filter: blur(28px) saturate(200%);
+  border: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow:
+    0 24px 48px -12px rgba(15, 23, 42, 0.22),
+    0 10px 24px -6px rgba(15, 23, 42, 0.12),
+    inset 0 2px 2.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1.5px 2.5px 0 rgba(15, 23, 42, 0.05) !important;
+}
+
+.liquid-glass-box {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.94) 0%, rgba(241, 245, 249, 0.78) 100%) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 1) !important;
+  box-shadow:
+    0 6px 18px -4px rgba(15, 23, 42, 0.05),
+    0 2px 6px -1px rgba(15, 23, 42, 0.03),
+    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1.5px 3px 0 rgba(15, 23, 42, 0.03) !important;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease !important;
+}
+
+.liquid-glass-box:hover {
+  border-color: rgba(255, 255, 255, 1) !important;
+  box-shadow:
+    0 10px 24px -4px rgba(15, 23, 42, 0.1),
+    inset 0 2px 3px 0 rgba(255, 255, 255, 1),
+    inset 0 -1.5px 3px 0 rgba(15, 23, 42, 0.04) !important;
+}
+
+.liquid-glass-topbar {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.88) 100%) !important;
+  backdrop-filter: blur(24px) saturate(190%);
+  -webkit-backdrop-filter: blur(24px) saturate(190%);
+  border-bottom: 1.5px solid rgba(255, 255, 255, 0.9) !important;
+  box-shadow:
+    0 10px 30px -10px rgba(15, 23, 42, 0.08),
+    0 4px 12px -2px rgba(15, 23, 42, 0.03),
+    inset 0 1.5px 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1.5px 2px 0 rgba(15, 23, 42, 0.03) !important;
+}
+
+/* 3D Liquid Glass Button Styling */
+.liquid-glass-btn-primary {
+  background: #00875A !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.45) !important;
+  box-shadow:
+    0 4px 14px -2px rgba(0, 135, 90, 0.32),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 2px 0 rgba(0, 0, 0, 0.15) !important;
+  color: #ffffff !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.liquid-glass-btn-primary:hover {
+  background: #007A4D !important;
+  box-shadow:
+    0 6px 18px -2px rgba(0, 135, 90, 0.42),
+    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.45) !important;
+}
+
+.liquid-glass-btn-destructive {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.55) !important;
+  box-shadow:
+    0 6px 18px -3px rgba(220, 38, 38, 0.4),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 2px 0 rgba(0, 0, 0, 0.2) !important;
+  color: #ffffff !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.liquid-glass-btn-destructive:hover {
+  background: linear-gradient(135deg, #f87171 0%, #b91c1c 50%, #991b1b 100%) !important;
+  box-shadow:
+    0 8px 22px -2px rgba(220, 38, 38, 0.5),
+    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.6) !important;
+}
+
+.liquid-glass-btn-outline {
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.95) 0%, rgba(241, 245, 249, 0.85) 100%) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 1) !important;
+  box-shadow:
+    0 4px 12px -2px rgba(15, 23, 42, 0.06),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 2px 0 rgba(15, 23, 42, 0.03) !important;
+  color: #1e293b !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.liquid-glass-btn-outline:hover {
+  border-color: rgba(255, 255, 255, 1) !important;
+  color: #00875a !important;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.95) 100%) !important;
+  box-shadow:
+    0 6px 16px -2px rgba(15, 23, 42, 0.08),
+    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 1) !important;
+}
+
+/* 3D Liquid Inset Glass Cut-out Input & Textarea Styling */
+.liquid-glass-input {
+  background: rgba(226, 232, 240, 0.75) !important;
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(203, 213, 225, 0.95) !important;
+  box-shadow:
+    inset 2.5px 3.5px 7px 0 rgba(15, 23, 42, 0.13),
+    inset 0 1px 3px 0 rgba(15, 23, 42, 0.09),
+    inset 0 -1.5px 3px 0 rgba(15, 23, 42, 0.06),
+    0 1px 2px 0 rgba(15, 23, 42, 0.08) !important;
+  color: #1e293b !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.liquid-glass-input:focus,
+.liquid-glass-input:focus-within {
+  background: rgba(241, 245, 249, 0.92) !important;
+  border-color: rgba(255, 255, 255, 1) !important;
+  box-shadow:
+    0 0 0 3px rgba(255, 255, 255, 0.85),
+    0 2px 8px -2px rgba(15, 23, 42, 0.1),
+    inset 2.5px 3.5px 7px 0 rgba(15, 23, 42, 0.13),
+    inset 0 1px 3px 0 rgba(15, 23, 42, 0.09) !important;
+}
+
+/* Medical PACS Dark Lightbox Viewer */
+.pacs-viewer-modal {
+  background: #000000 !important;
+  border: 1px solid #1e293b !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.9) !important;
+}
+
+.pacs-viewer-modal * {
+  border-color: #1e293b;
+}
+
+.pacs-btn-dark {
+  background: #1e293b !important;
+  color: #ffffff !important;
+  border: 1px solid #334155 !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2) !important;
+}
+
+.pacs-btn-dark:hover {
+  background: #334155 !important;
+  color: #ffffff !important;
+  border-color: #475569 !important;
+}
+
+.pacs-dropdown-dark {
+  background: #0f172a !important;
+  background-color: #0f172a !important;
+  border: 1px solid #334155 !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 8px 10px -6px rgba(0, 0, 0, 0.8) !important;
+  color: #f8fafc !important;
+}
+
+.pacs-dropdown-item {
+  color: #cbd5e1 !important;
+  transition: all 0.15s ease !important;
+}
+
+.pacs-dropdown-item:hover,
+.pacs-dropdown-item:focus {
+  background: #1e293b !important;
+  color: #ffffff !important;
+}
+
+.pacs-dropdown-item-active {
+  background: #00875a !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+/* 3D Liquid Glass Toast Notification */
+.liquid-glass-toast {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96) 0%, rgba(232, 248, 242, 0.9) 100%) !important;
+  backdrop-filter: blur(24px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(24px) saturate(190%) !important;
+  border: 1.5px solid rgba(255, 255, 255, 0.95) !important;
+  border-top: 2px solid rgba(255, 255, 255, 1) !important;
+  box-shadow:
+    0 20px 40px -8px rgba(0, 135, 90, 0.28),
+    0 10px 20px -4px rgba(15, 23, 42, 0.1),
+    inset 0 2px 2.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1.5px 3px 0 rgba(0, 135, 90, 0.08) !important;
+}
+
+
+
+/* Top Screen Navigation Glowing Indicator */
+@keyframes navGlowPulse {
+  0% {
+    opacity: 0.7;
+    background-position: 0% 50%;
+  }
+
+  50% {
+    opacity: 1;
+    background-position: 100% 50%;
+  }
+
+  100% {
+    opacity: 0.7;
+    background-position: 0% 50%;
+  }
+}
+
+.top-nav-glowing-bar {
+  background: linear-gradient(90deg, #00875a, #00b377, #34d399, #00b377, #00875a);
+  background-size: 200% 200%;
+  animation: navGlowPulse 1.2s ease infinite;
+  box-shadow: 0 0 12px rgba(0, 179, 119, 0.75), 0 0 4px rgba(0, 135, 90, 0.9);
+}
+
+/* Inertia NProgress Custom Theme */
+#nprogress {
+  pointer-events: none;
+}
+
+#nprogress .bar {
+  background: linear-gradient(90deg, #00875a, #00b377, #34d399) !important;
+  position: fixed !important;
+  z-index: 999999 !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 3px !important;
+  box-shadow: 0 0 10px rgba(0, 179, 119, 0.85), 0 0 4px rgba(0, 135, 90, 0.9) !important;
+}
+
+#nprogress .peg {
+  display: block !important;
+  position: absolute !important;
+  right: 0px !important;
+  width: 100px !important;
+  height: 100% !important;
+  box-shadow: 0 0 14px #00b377, 0 0 8px #00875a !important;
+  opacity: 1 !important;
+  transform: rotate(3deg) translate(0px, -4px) !important;
+}
+
+/* =========================================================================
+   Skeleton Screen & Shimmer Animation
+   ========================================================================= */
+
+@keyframes skeletonWave {
+  0% {
+    transform: translateX(-100%);
+  }
+
+  50% {
+    transform: translateX(100%);
+  }
+
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background-color: rgba(226, 232, 240, 0.7);
+}
+
+.skeleton-shimmer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.55) 45%,
+      rgba(232, 248, 242, 0.7) 50%,
+      rgba(255, 255, 255, 0.55) 55%,
+      rgba(255, 255, 255, 0) 100%);
+  animation: skeletonWave 1.6s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  content: '';
+  will-change: transform;
+}

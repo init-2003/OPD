@@ -140,7 +140,7 @@ class PatientPdfController extends Controller
             $mpdf->showWatermarkImage = true;
         }
 
-        $currentDate = date('d/m/Y');
+        $currentDate = date('d/m/Y h:i:s A');
         $opHn = $patient['op_hn'] ?? $patient['OP_HN'] ?? $hn;
         $fullname = preg_replace('/\s+/u', ' ', trim((string) ($patient['fullname'] ?? '')));
         if ($fullname === '' || $fullname === '-') {
@@ -161,11 +161,8 @@ class PatientPdfController extends Controller
             $sex = $rawSex !== '' ? $rawSex : '-';
         }
 
-        $refDoc = $patient['OP_SEND_DR_Name'] ?? $patient['OP_SEND_DR'] ?? $patient['OP_DR_NAME'] ?? '-';
+        $refDoc = $patient['OP_Ref_Doc'] ?? $patient['OP_SEND_DR_Name'] ?? $patient['OP_SEND_DR'] ?? $patient['OP_DR_NAME'] ?? '';
         $refDoc = trim((string) $refDoc);
-        if ($refDoc === '') {
-            $refDoc = '-';
-        }
 
         $reportBy = $patient['Report_By'] ?? '';
         $reportBy = trim((string) $reportBy);
@@ -437,16 +434,16 @@ class PatientPdfController extends Controller
         // only (mPDF does not handle <style> blocks in header/footer HTML).
         // Coordinates are template pt measured from the top-left of the page.
         $headerHtml = ''
-            . "<div style='position:absolute;left:57.9pt;top:117pt;font-size:16pt;color:#000;'>{$opHn}</div>"
-            . "<div style='position:absolute;left:74.25pt;top:139.5pt;font-size:16pt;color:#000;'>{$fullname}</div>"
-            . "<div style='position:absolute;left:399pt;top:136.5pt;font-size:16pt;color:#000;'>{$age}</div>"
-            . "<div style='position:absolute;left:525pt;top:136.5pt;font-size:16pt;color:#000;'>{$sex}</div>"
-            . "<div style='position:absolute;left:78pt;top:159pt;font-size:16pt;color:#000;'>{$refDoc}</div>"
-            . "<div style='position:absolute;left:429.75pt;top:159pt;font-size:16pt;color:#000;'>{$reportOn}</div>";
+            . "<div style='position:absolute;left:76pt;top:117pt;font-size:16pt;color:#000;'>{$opHn}</div>"
+            . "<div style='position:absolute;left:76pt;top:139.5pt;font-size:16pt;color:#000;'>{$fullname}</div>"
+            . "<div style='position:absolute;left:395pt;top:136.5pt;font-size:16pt;color:#000;'>{$age}</div>"
+            . "<div style='position:absolute;left:522pt;top:136.5pt;font-size:16pt;color:#000;'>{$sex}</div>"
+            . "<div style='position:absolute;left:76pt;top:159pt;font-size:16pt;color:#000;'>{$refDoc}</div>"
+            . "<div style='position:absolute;left:426pt;top:159pt;font-size:16pt;color:#000;'>{$reportOn}</div>";
 
         $footerHtml = ''
             . "<div style='position:absolute;left:90pt;top:775.5pt;font-size:18pt;font-weight:bold;color:#000;'>{$reportBy}</div>"
-            . "<div style='position:absolute;left:479.25pt;top:775.5pt;font-size:16pt;color:#000;'>{$currentDate}</div>";
+            . "<div style='position:absolute;left:475pt;top:775.5pt;font-size:16pt;color:#000;'>{$currentDate}</div>";
 
         $mpdf->SetHTMLHeader($headerHtml);
         $mpdf->SetHTMLFooter($footerHtml);
@@ -603,7 +600,7 @@ class PatientPdfController extends Controller
             $mpdf->showWatermarkImage = true;
         }
 
-        $currentDate = date('d/m/Y');
+        $currentDate = date('d/m/Y h:i:s A');
         $opHn = $patient['op_hn'] ?? $patient['OP_HN'] ?? $hn;
         $fullname = preg_replace('/\s+/u', ' ', trim((string) ($patient['fullname'] ?? '')));
         if ($fullname === '' || $fullname === '-') {
@@ -624,11 +621,8 @@ class PatientPdfController extends Controller
             $sex = $rawSex !== '' ? $rawSex : '-';
         }
 
-        $refDoc = $patient['OP_SEND_DR_Name'] ?? $patient['OP_SEND_DR'] ?? $patient['OP_DR_NAME'] ?? '-';
+        $refDoc = $patient['OP_Ref_Doc'] ?? $patient['OP_SEND_DR_Name'] ?? $patient['OP_SEND_DR'] ?? $patient['OP_DR_NAME'] ?? '';
         $refDoc = trim((string) $refDoc);
-        if ($refDoc === '') {
-            $refDoc = '-';
-        }
 
         $reportBy = $patient['Report_By'] ?? '';
         $reportBy = trim((string) $reportBy);
@@ -693,16 +687,16 @@ class PatientPdfController extends Controller
 
         // Page header/footer: exact same coordinates as text findings PDF
         $headerHtml = ''
-            . "<div style='position:absolute;left:57.9pt;top:117pt;font-size:16pt;color:#000;'>{$opHn}</div>"
-            . "<div style='position:absolute;left:74.25pt;top:139.5pt;font-size:16pt;color:#000;'>{$fullname}</div>"
-            . "<div style='position:absolute;left:399pt;top:136.5pt;font-size:16pt;color:#000;'>{$age}</div>"
-            . "<div style='position:absolute;left:525pt;top:136.5pt;font-size:16pt;color:#000;'>{$sex}</div>"
-            . "<div style='position:absolute;left:78pt;top:159pt;font-size:16pt;color:#000;'>{$refDoc}</div>"
-            . "<div style='position:absolute;left:429.75pt;top:159pt;font-size:16pt;color:#000;'>{$reportOn}</div>";
+            . "<div style='position:absolute;left:76pt;top:117pt;font-size:16pt;color:#000;'>{$opHn}</div>"
+            . "<div style='position:absolute;left:76pt;top:139.5pt;font-size:16pt;color:#000;'>{$fullname}</div>"
+            . "<div style='position:absolute;left:395pt;top:136.5pt;font-size:16pt;color:#000;'>{$age}</div>"
+            . "<div style='position:absolute;left:522pt;top:136.5pt;font-size:16pt;color:#000;'>{$sex}</div>"
+            . "<div style='position:absolute;left:76pt;top:159pt;font-size:16pt;color:#000;'>{$refDoc}</div>"
+            . "<div style='position:absolute;left:426pt;top:159pt;font-size:16pt;color:#000;'>{$reportOn}</div>";
 
         $footerHtml = ''
             . "<div style='position:absolute;left:90pt;top:775.5pt;font-size:18pt;font-weight:bold;color:#000;'>{$reportBy}</div>"
-            . "<div style='position:absolute;left:479.25pt;top:775.5pt;font-size:16pt;color:#000;'>{$currentDate}</div>";
+            . "<div style='position:absolute;left:475pt;top:775.5pt;font-size:16pt;color:#000;'>{$currentDate}</div>";
 
         $mpdf->SetHTMLHeader($headerHtml);
         $mpdf->SetHTMLFooter($footerHtml);

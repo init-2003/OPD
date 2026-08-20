@@ -73,10 +73,10 @@ class PatientUltrasoundController extends Controller
 
         $dbPresets = [];
         try {
-            $presetsRaw = DB::select("SELECT PH_Xray_Name, PH_Xray_Result FROM PHM_XRAY WHERE PH_Xray_Name IS NOT NULL AND PH_Xray_Name <> '' ORDER BY PH_Xray_Name ASC");
-            foreach ($presetsRaw as $idx => $row) {
+            $presetsRaw = DB::select("SELECT PH_Xray_ID, PH_Xray_Name, PH_Xray_Result FROM PHM_XRAY WHERE PH_Xray_Name IS NOT NULL AND PH_Xray_Name <> '' ORDER BY PH_Xray_Name ASC");
+            foreach ($presetsRaw as $row) {
                 $dbPresets[] = [
-                    'id' => 'db_' . ($idx + 1),
+                    'id' => (string) ($row->PH_Xray_ID ?? ''),
                     'label' => trim((string) ($row->PH_Xray_Name ?? '')),
                     'text' => trim((string) ($row->PH_Xray_Result ?? '')),
                 ];
@@ -527,5 +527,148 @@ class PatientUltrasoundController extends Controller
         }
 
         return redirect()->back()->with('success', 'ลบรูปภาพ X-Ray เรียบร้อยแล้ว');
+    }
+
+    /**
+     * Get all X-ray / Ultrasound presets from PHM_XRAY.
+     */
+    public function getPresets()
+    {
+        try {
+            $presetsRaw = DB::table('PHM_XRAY')
+                ->whereNotNull('PH_Xray_Name')
+                ->where('PH_Xray_Name', '<>', '')
+                ->orderBy('PH_Xray_Name', 'asc')
+                ->get();
+
+            $presets = $presetsRaw->map(function ($row) {
+                return [
+                    'id' => (string) ($row->PH_Xray_ID ?? ''),
+                    'label' => trim((string) ($row->PH_Xray_Name ?? '')),
+                    'text' => trim((string) ($row->PH_Xray_Result ?? '')),
+                ];
+            })->values()->all();
+
+            return response()->json([
+                'success' => true,
+                'presets' => $presets,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'presets' => [],
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Store new preset into PHM_XRAY.
+     */
+    public function storePreset(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'result' => 'required|string',
+        ]);
+
+        $name = trim((string) $request->input('name'));
+        $result = trim((string) $request->input('result'));
+
+        try {
+            $insertedId = null;
+            try {
+                $insertedId = DB::table('PHM_XRAY')->insertGetId([
+                    'PH_Xray_Name' => $name,
+                    'PH_Xray_Result' => $result,
+                ], 'PH_Xray_ID');
+            } catch (\Throwable $e) {
+                DB::table('PHM_XRAY')->insert([
+                    'PH_Xray_Name' => $name,
+                    'PH_Xray_Result' => $result,
+                ]);
+            }
+
+            if (!$insertedId) {
+                $latest = DB::table('PHM_XRAY')
+                    ->where('PH_Xray_Name', $name)
+                    ->orderBy('PH_Xray_ID', 'desc')
+                    ->first();
+                $insertedId = $latest?->PH_Xray_ID ?? time();
+            }
+
+            $newPreset = [
+                'id' => (string) $insertedId,
+                'label' => $name,
+                'text' => $result,
+            ];
+
+            return response()->json([
+                'success' => true,
+                'message' => 'บันทึก Preset ลงฐานข้อมูลเรียบร้อยแล้ว',
+                'preset' => $newPreset,
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'เกิดข้อผิดพลาดในการบันทึก Preset: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Update an existing preset in PHM_XRAY by PH_Xray_ID.
+     */
+    public function updatePreset(Request $request, string|int $id)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'result' => 'required|string',
+        ]);
+
+        $name = trim((string) $request->input('name'));
+        $result = trim((string) $request->input('result'));
+
+        try {
+            DB::table('PHM_XRAY')->where('PH_Xray_ID', $id)->update([
+                'PH_Xray_Name' => $name,
+                'PH_Xray_Result' => $result,
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'บันทึกการแก้ไข Preset เรียบร้อยแล้ว',
+                'preset' => [
+                    'id' => (string) $id,
+                    'label' => $name,
+                    'text' => $result,
+                ],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'เกิดข้อผิดพลาดในการแก้ไข Preset: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Delete a preset from PHM_XRAY by PH_Xray_ID.
+     */
+    public function destroyPreset(string|int $id)
+    {
+        try {
+            DB::table('PHM_XRAY')->where('PH_Xray_ID', $id)->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'ลบ Preset ออกจากฐานข้อมูลเรียบร้อยแล้ว',
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'เกิดข้อผิดพลาดในการลบ Preset: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

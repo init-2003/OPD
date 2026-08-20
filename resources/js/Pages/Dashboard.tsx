@@ -79,11 +79,17 @@ export default function Dashboard({
         if (typeof window !== 'undefined') {
             const savedHn = sessionStorage.getItem('dashboard_selected_hn');
             const savedVt = sessionStorage.getItem('dashboard_selected_vt');
+            const savedStatus = sessionStorage.getItem('dashboard_status_filter') || 'D';
             if (savedHn) {
-                const found = patients.find(
-                    (p) => (p.op_hn === savedHn || (p as any).OP_HN === savedHn) &&
-                           (!savedVt || String(p.VT_NO || '') === savedVt)
-                );
+                const found = patients.find((p) => {
+                    const matchesHn = (p.op_hn === savedHn || (p as any).OP_HN === savedHn) && (!savedVt || String(p.VT_NO || '') === savedVt);
+                    if (!matchesHn) return false;
+                    if (savedStatus !== 'all') {
+                        const pStatus = (p.OP_Track_STS || (p as any).op_track_sts || 'D').toUpperCase();
+                        return pStatus === savedStatus;
+                    }
+                    return true;
+                });
                 if (found) return found;
             }
         }
@@ -188,6 +194,43 @@ export default function Dashboard({
         validCurrentPage * itemsPerPage
     );
 
+    // Automatically keep selectedRow synchronized with filteredPatients
+    useEffect(() => {
+        if (selectedRow) {
+            const currentHn = selectedRow.op_hn || (selectedRow as any).OP_HN;
+            const currentVt = String(selectedRow.VT_NO || '');
+            const matchingPatient = filteredPatients.find(
+                (p) => (p.op_hn === currentHn || (p as any).OP_HN === currentHn) &&
+                       (!currentVt || String(p.VT_NO || '') === currentVt)
+            );
+
+            if (matchingPatient) {
+                // If patient data updated, keep state synced
+                if (matchingPatient !== selectedRow) {
+                    setSelectedRow(matchingPatient);
+                }
+            } else {
+                // Patient no longer matches active status filter (e.g. moved from 'รอตรวจ D' to 'ส่งจัดยา W')
+                // Immediately switch to the next patient or null so right card doesn't show stale patient
+                handleSelectRow(filteredPatients.length > 0 ? filteredPatients[0] : null);
+            }
+        }
+    }, [filteredPatients, statusFilter]);
+
+    // Listen for new patient notifications and reload patient list smoothly in background
+    useEffect(() => {
+        const handleNewPatientArrived = () => {
+            router.reload({
+                only: ['patients', 'stats'],
+            });
+        };
+
+        window.addEventListener('opd-new-patient-arrived', handleNewPatientArrived);
+        return () => {
+            window.removeEventListener('opd-new-patient-arrived', handleNewPatientArrived);
+        };
+    }, []);
+
     // When filters change, reset to page 1 unless we are keeping track of selectedRow's page
     useEffect(() => {
         if (selectedRow) {
@@ -213,7 +256,15 @@ export default function Dashboard({
             sessionStorage.setItem('dashboard_date', newDate);
         }
         if (newDate) {
-            router.get(route('dashboard'), { date: newDate }, { preserveState: false });
+            router.get(
+                route('dashboard'),
+                { date: newDate },
+                {
+                    preserveState: true,
+                    preserveScroll: true,
+                    only: ['patients', 'stats', 'selectedDate', 'displayDate'],
+                }
+            );
         }
     };
 
@@ -291,8 +342,17 @@ export default function Dashboard({
 
                                     {/* Filter Controls Row: Date Filter Segment + Status Filter + Search Input */}
                                     <div className="flex flex-wrap items-center gap-2">
-                                        {/* Date Filter Segment */}
-                                        <div className="inline-flex items-center gap-1 p-1 bg-slate-200/70 rounded-full border border-slate-300/50 shadow-inner">
+                                        {/* Date Filter Segment with Pure CSS Smooth Sliding Pill */}
+                                        <div className="relative inline-flex items-center p-1 bg-slate-200/70 rounded-full border border-slate-300/50 shadow-inner">
+                                            {/* Sliding Pill Background Indicator */}
+                                            <div
+                                                className={`absolute top-1 bottom-1 rounded-full liquid-glass-btn-primary shadow-sm pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
+                                                    filterDate === 'all'
+                                                        ? 'left-[150px] w-[76px]'
+                                                        : 'left-1 w-[146px]'
+                                                }`}
+                                            />
+
                                             <DatePicker
                                                 value={filterDate}
                                                 onChange={onDateSelect}
@@ -301,17 +361,26 @@ export default function Dashboard({
 
                                             <button
                                                 type="button"
-                                                className={`h-9 px-3.5 text-xs sm:text-sm font-bold rounded-full transition-all duration-200 cursor-pointer select-none ${filterDate === 'all'
-                                                        ? 'liquid-glass-btn-primary text-white shadow-sm'
-                                                        : 'bg-transparent text-slate-700 hover:text-[#00875A] hover:bg-white/60'
-                                                    }`}
+                                                className={`relative z-10 h-9 w-[76px] text-xs sm:text-sm font-bold rounded-full flex items-center justify-center transition-colors duration-200 cursor-pointer select-none bg-transparent ${
+                                                    filterDate === 'all'
+                                                        ? 'text-white'
+                                                        : 'text-slate-700 hover:text-[#00875A]'
+                                                }`}
                                                 onClick={() => {
                                                     setSelectedRow(null);
                                                     setFilterDate('all');
                                                     if (typeof window !== 'undefined') {
                                                         sessionStorage.setItem('dashboard_date', 'all');
                                                     }
-                                                    router.get(route('dashboard'), { date: 'all' }, { preserveState: false });
+                                                    router.get(
+                                                        route('dashboard'),
+                                                        { date: 'all' },
+                                                        {
+                                                            preserveState: true,
+                                                            preserveScroll: true,
+                                                            only: ['patients', 'stats', 'selectedDate', 'displayDate'],
+                                                        }
+                                                    );
                                                 }}
                                             >
                                                 ทั้งหมด
@@ -827,6 +896,15 @@ export default function Dashboard({
                                             <Link
                                                 href={route('patient.show', { hn: selectedRow.op_hn, vt: selectedRow.VT_NO || '' })}
                                                 className="flex-1"
+                                                onClick={() => {
+                                                    if (typeof window !== 'undefined' && selectedRow) {
+                                                        window.dispatchEvent(
+                                                            new CustomEvent('opd-dismiss-patient-notification', {
+                                                                detail: { hn: selectedRow.op_hn, vt: selectedRow.VT_NO },
+                                                            })
+                                                        );
+                                                    }
+                                                }}
                                             >
                                                 <Button
                                                     type="button"

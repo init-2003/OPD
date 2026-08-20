@@ -47,6 +47,12 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // PDF Reports (Findings Form & Image Print)
     Route::get('/patient/{hn}/pdf', [PatientPdfController::class, 'downloadUltrasoundPdf'])->name('patient.ultrasound.pdf');
     Route::get('/patient/{hn}/image/pdf', [PatientPdfController::class, 'downloadUltrasoundImagePdf'])->name('patient.ultrasound.image.pdf');
+
+    // Findings Presets Management (PHM_XRAY)
+    Route::get('/api/presets', [PatientUltrasoundController::class, 'getPresets'])->name('presets.index');
+    Route::post('/api/presets', [PatientUltrasoundController::class, 'storePreset'])->name('presets.store');
+    Route::put('/api/presets/{id}', [PatientUltrasoundController::class, 'updatePreset'])->name('presets.update');
+    Route::delete('/api/presets/{id}', [PatientUltrasoundController::class, 'destroyPreset'])->name('presets.destroy');
 });
 
 Route::middleware('auth')->group(function () {

@@ -12,23 +12,38 @@ test('users can authenticate using the login screen', function () {
     $user = User::factory()->create();
 
     $response = $this->post('/login', [
-        'email' => $user->email,
+        'PB_user' => $user->PB_user,
         'password' => 'password',
     ]);
 
     $this->assertAuthenticated();
-    $response->assertRedirect(route('dashboard', absolute: false));
+    $today = now()->timezone('Asia/Bangkok')->format('Y-m-d');
+    $response->assertRedirect(route('dashboard', ['date' => $today]));
 });
 
 test('users can not authenticate with invalid password', function () {
     $user = User::factory()->create();
 
     $this->post('/login', [
-        'email' => $user->email,
+        'PB_user' => $user->PB_user,
         'password' => 'wrong-password',
     ]);
 
     $this->assertGuest();
+});
+
+test('users can authenticate with remember me', function () {
+    $user = User::factory()->create();
+
+    $response = $this->post('/login', [
+        'PB_user' => $user->PB_user,
+        'password' => 'password',
+        'remember' => true,
+    ]);
+
+    $this->assertAuthenticated();
+    $today = now()->timezone('Asia/Bangkok')->format('Y-m-d');
+    $response->assertRedirect(route('dashboard', ['date' => $today]));
 });
 
 test('users can logout', function () {
@@ -39,3 +54,5 @@ test('users can logout', function () {
     $this->assertGuest();
     $response->assertRedirect('/');
 });
+
+

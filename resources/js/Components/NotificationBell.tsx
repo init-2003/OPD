@@ -255,6 +255,15 @@ export default function NotificationBell() {
                         setHasNewAlert(true);
                         setTimeout(() => setHasNewAlert(false), 6000);
 
+                        // Broadcast event so Dashboard table reloads immediately without full-page refresh
+                        if (typeof window !== 'undefined') {
+                            window.dispatchEvent(
+                                new CustomEvent('opd-new-patient-arrived', {
+                                    detail: { count: newlyArrived.length, patients: newlyArrived },
+                                })
+                            );
+                        }
+
                         // Fire Desktop Notification for new patient
                         newlyArrived.forEach((newP) => {
                             triggerDesktopNotification(newP);
@@ -285,8 +294,34 @@ export default function NotificationBell() {
             fetchNotifications();
         }, 20000);
 
-        return () => clearInterval(interval);
-    }, []);
+        // Listen for instant dismiss when clicking "บันทึกผลการตรวจ" or saving results
+        const handleInstantDismiss = (e: Event) => {
+            const customEvent = e as CustomEvent<{ hn: string; vt?: string | number }>;
+            const { hn, vt } = customEvent.detail || {};
+            if (hn) {
+                setReadKeys((prev) => {
+                    const next = new Set(prev);
+                    if (vt) next.add(`${hn}-${vt}`);
+                    rawPatients.forEach((p) => {
+                        if (p.op_hn === hn) {
+                            next.add(`${p.op_hn}-${p.VT_NO || p.vt_id}`);
+                        }
+                    });
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('read_patient_notifications', JSON.stringify(Array.from(next)));
+                    }
+                    return next;
+                });
+            }
+        };
+
+        window.addEventListener('opd-dismiss-patient-notification', handleInstantDismiss);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('opd-dismiss-patient-notification', handleInstantDismiss);
+        };
+    }, [rawPatients]);
 
     // Filter out read notifications so only unread/new ones are displayed
     const unreadPatients = rawPatients.filter(

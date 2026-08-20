@@ -51,6 +51,8 @@ class User extends Authenticatable
         'Password',
         'Em_record',
         'Report_By',
+        'name',
+        'email',
     ];
 
     /**
@@ -60,7 +62,6 @@ class User extends Authenticatable
      */
     protected $hidden = [
         'Password',
-        'remember_token',
     ];
 
     /**
@@ -84,13 +85,50 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the token value for the "remember me" session.
+     *
+     * @return string|null
+     */
+    public function getRememberToken()
+    {
+        return null;
+    }
+
+    /**
+     * Set the token value for the "remember me" session.
+     *
+     * @param  string  $value
+     * @return void
+     */
+    public function setRememberToken($value)
+    {
+        // No-op: SQL Server Create_User table does not have remember_token column
+    }
+
+    /**
+     * Get the column name for the "remember me" token.
+     *
+     * @return string
+     */
+    public function getRememberTokenName()
+    {
+        return '';
+    }
+
+    /**
      * Accessor for 'name' attribute so existing UI components referencing user.name work seamlessly.
      *
      * @return string
      */
     public function getNameAttribute()
     {
-        return $this->attributes['Em_Fullname'] ?? $this->attributes['PB_user'] ?? '';
+        return $this->attributes['Em_Fullname'] ?? $this->attributes['name'] ?? $this->attributes['PB_user'] ?? '';
+    }
+
+    public function setNameAttribute($value)
+    {
+        $this->attributes['Em_Fullname'] = $value;
+        $this->attributes['name'] = $value;
     }
 
     /**
@@ -100,6 +138,11 @@ class User extends Authenticatable
      */
     public function getEmailAttribute()
     {
-        return $this->attributes['PB_user'] ?? '';
+        return $this->attributes['email'] ?? $this->attributes['PB_user'] ?? '';
+    }
+
+    public function setEmailAttribute($value)
+    {
+        $this->attributes['email'] = $value;
     }
 }

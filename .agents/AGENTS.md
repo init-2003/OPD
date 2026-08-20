@@ -6,6 +6,9 @@
 - **Styling**: Tailwind CSS v4 (`@tailwindcss/vite`)
 - **UI Library**: Shadcn/ui (Radix UI primitives + Tailwind) & Headless UI (`@headlessui/react`)
 - **Database**: SQLite (`database/database.sqlite`)
+- **Request Strategy**:
+  - **Inertia.js**: Page routing, view rendering, and full-page prop synchronization.
+  - **Axios**: Silent background operations (Preset CRUD, asynchronous ultrasound image uploads with progress tracking, background auto-save) without triggering Inertia page re-renders.
 
 ---
 
@@ -14,7 +17,7 @@
   - Primary Theme Green: `#00875A` / `#007A4D` / `emerald-600` / `emerald-700`
   - Subtle Green Backgrounds / Hover: `#E8F8F2` / `emerald-50` / `emerald-100/60`
   - Focus Ring & Accent: `#00875A/20`
-  - Glassmorphic UI utilities defined in `app.css`: `.liquid-glass-card`, `.liquid-glass-box`, `.liquid-glass-btn-primary`.
+  - Glassmorphic UI utilities defined in `app.css`: `.liquid-glass-card`, `.liquid-glass-box`, `.liquid-glass-btn-primary`, `.liquid-glass-btn-outline`.
 - **Typography & Font Weight Guidelines**:
   - Content values (e.g. Chief Complaint text, Diagnosis descriptions, Notes) should use **`font-medium text-slate-800`** to maintain clean legibility and prevent overly heavy/dense Thai characters (avoid `font-bold` on multi-line text bodies).
   - Field labels use `font-semibold text-slate-500` or `font-bold text-slate-700`.
@@ -48,8 +51,18 @@
 
 ---
 
+## Preset Management & Context Menu
+- **Database Model**: Stored in table `PHM_XRAY` (`PH_Xray_ID`, `PH_Xray_Name`, `PH_Xray_Result`).
+- **Context Menu Interaction**:
+  - Right-click (desktop) and long-press (tablet/iPad touch) on preset buttons triggers the floating Liquid Glass context menu.
+  - Action buttons: "แก้ไข Preset" (Edit) and "ลบ Preset" (Delete with confirmation).
+  - Context menu layout: Streamlined without header title box.
+  - Background Persistence: Actions execute asynchronously via Axios (`PUT /api/presets/{id}`, `POST /api/presets`, `DELETE /api/presets/{id}`).
+
+---
+
 ## Responsive Design & Tablet / iPad Compatibility
-- **Badges & Pill Tags**: Always apply `whitespace-nowrap shrink-0` on badges, visit tags, and count labels (e.g. `${count} รูป`) to prevent awkward line breaks on tablets/Ipad.
+- **Badges & Pill Tags**: Always apply `whitespace-nowrap shrink-0` on badges, visit tags, and count labels (e.g. `${count} รูป`) to prevent awkward line breaks on tablets/iPads.
 - **Scroll Containers**: Tables and card lists must support smooth momentum touch scrolling with `WebkitOverflowScrolling: 'touch'`.
 
 ---
@@ -60,15 +73,46 @@
 
 ---
 
+## X-Ray Findings Editor & PDF Generator
+The core clinical reporting feature: paginated rich-text findings editor + PDF output matching the official X-ray form template (`public/XRAY_Form.png`).
+
+### Editor (frontend) — `resources/js/Pages/UltrasoundResult.tsx`
+- **Tiptap Editor**: One instance per page; pages stored as `string[]` of HTML, persisted as a **JSON array** in `OP_Xray_Result` (or `OP_Ultrasound_Result`).
+- **Shift+Enter & HardBreak**: Configured with `hardBreak: { keepMarks: true }`. Shift+Enter creates inline `<br/>` elements within paragraphs.
+- **Page Geometry & Prevention of Text Clipping**:
+  - `PAPER_WIDTH = 794px`, `CARD_PADDING_X = 40px`, `PAGE_WIDTH = 714px`, `EDITOR_W = 712px`.
+  - `LINE_H = 32.9px` (matches 16pt mPDF line pitch).
+  - `DEFAULT_CAP_LINES = 23`, `CARD_PADDING_Y = 36px`, `EDITOR_HEIGHT = Math.round(LINE_H * linesPerPage) + 16px`.
+  - Uses `overflow: visible` and `minHeight` so Thai descender vowels (e.g. `ุ`, `ู`, `ญ`, `ฐ`) and cursor lines are never clipped at the bottom boundary.
+- **Auto-pagination & Flow**:
+  - `countBlockLines()` and `countHtmlLines()` calculate line heights via DOM rendered heights using `Math.ceil((h - 2) / LINE_H)` to accurately count wrapped lines, empty lines, and `<br/>` sub-lines.
+  - `flushPage()` re-splits pages on keystroke via `splitIntoPages()`; overflow smoothly cascades to subsequent pages.
+  - Handles `[PAGE BREAK]` commands and dynamic `[SET_LINES_PER_PAGE: X]` markers.
+  - `handleBackspaceAtStart()` flows text back up to the preceding page when space allows.
+
+### PDF Generator (backend) — `DashboardController@downloadXrayPdf` / `PatientPdfController`
+- **Route**: `GET /patient/{hn}/pdf` (`patient.ultrasound.pdf` / `patient.xray.pdf`).
+- **1 Editor Page ➔ 1 PDF Page**: Each stored page JSON element is chunked with `$maxFindingsLines = 23` lines (`$findingsTextWidth = 540.0pt`).
+- **Precision Vertical Centering Margins**:
+  - Form template top line at `y = 61.9mm` (175.5pt); bottom line at `y = 269.9mm` (765.0pt).
+  - Calibrated margins: `'margin_top' => 70.3mm`, `'margin_bottom' => 26.5mm`, `'margin_left' => 10.0mm`, `'margin_right' => 8.4mm`.
+  - Symmetrically centers findings text between top and bottom lines with exact equal **`8.4mm`** top and bottom gaps.
+- **HTML Tokenizer & Integrity**: Tokenizer preserves `<br/>` tags inside `<p>...</p>` blocks and increments line counts with `\n` without fragmenting paragraph containers, preventing text overlapping.
+- **Template Watermark & Coordinates**:
+  - Full-page watermark: `public/XRAY_Form.png` (`watermarkImgBehind = true`).
+  - Header fields (HN, Name, Age, Sex, RefDoc, ReportOn) and Footer fields (ReportBy, Date) printed via absolute coordinates matching the template grid.
+
+---
+
+## Build & Verification
+- Frontend build: `npm run build` (= `tsc && vite build`); dev: `npm run dev`.
+- PHP syntax & test suite: `php artisan test` (Pest).
+- PDF layout is validated against form coordinates and decompressed stream output.
+
 ## Project Conventions
 - **Shadcn UI Components**: Store all reusable Shadcn UI components under `@/Components/ui/` (`resources/js/Components/ui/`).
 - **Utility Functions**: Store utility functions like `cn()` in `@/lib/utils` (`resources/js/lib/utils.ts`).
 - **Path Aliases**:
   - `@/*` -> `resources/js/*`
   - `ziggy-js` -> `vendor/tightenco/ziggy`
-- **Build Tool**: Vite (`npx vite build` or `npm run dev`)
-
-## Code Style & Best Practices
-1. **Component Design**: Prefer Shadcn UI primitives (`Button`, `Card`, `Input`, `Label`, `Dialog`, `DropdownMenu`, etc.) for all new UI components.
-2. **TypeScript**: Maintain full TypeScript type safety across React pages and components.
-3. **Database Operations**: Use Eloquent models and migrations. SQLite PDO driver must be enabled (`extension=pdo_sqlite` in `php.ini`).
+- **Build Tool**: Vite (`npm run build` or `npm run dev`)

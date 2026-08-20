@@ -11,6 +11,25 @@ return new class extends Migration
      */
     public function up(): void
     {
+        Schema::create('Create_User', function (Blueprint $table) {
+            $table->id('Em_id');
+            $table->string('Em_Fullname')->nullable();
+            $table->string('EMP_STS')->default('D')->nullable();
+            $table->string('EMP_STS_Name')->nullable();
+            $table->string('Em_Cer_No')->nullable();
+            $table->string('Sts')->default('Doctor')->nullable();
+            $table->string('STS_Type')->nullable();
+            $table->string('Degree')->nullable();
+            $table->string('PB_user')->unique();
+            $table->string('Password');
+            $table->string('Em_record')->nullable();
+            $table->string('Report_By')->nullable();
+            $table->string('name')->nullable();
+            $table->string('email')->nullable();
+            $table->timestamp('email_verified_at')->nullable();
+            $table->rememberToken();
+        });
+
         Schema::create('users', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -42,6 +61,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::dropIfExists('Create_User');
         Schema::dropIfExists('users');
         Schema::dropIfExists('password_reset_tokens');
         Schema::dropIfExists('sessions');

@@ -595,22 +595,9 @@ export default function PatientHistory({ patient, visits = [], hn }: PatientHist
                                             </div>
                                             {/* อาการเบื้องต้น (Chief Complaint) */}
                                             <div className="p-2 liquid-glass-box rounded-xl space-y-0.5">
-                                                <div className="flex items-center justify-between">
-                                                    <span className="text-xs font-semibold text-slate-500 block flex items-center gap-1 mb-0.5 truncate">
-                                                        <FileText className="h-3.5 w-3.5 text-[#00875A]" /> อาการเบื้องต้น
-                                                    </span>
-                                                    {selectedRow && (
-                                                        <Button
-                                                            onClick={handleOpenChiefModal}
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="h-5 px-1.5 text-[10px] font-bold text-[#00875A] hover:bg-[#E8F8F2] rounded-full flex items-center gap-0.5 cursor-pointer -mt-1 -mr-1"
-                                                        >
-                                                            <Edit3 className="h-2.5 w-2.5" />
-                                                            <span>{selectedRow?.OP_CHIEF ? 'แก้ไข' : 'เพิ่ม'}</span>
-                                                        </Button>
-                                                    )}
-                                                </div>
+                                                <span className="text-xs font-semibold text-slate-500 block flex items-center gap-1 mb-0.5 truncate">
+                                                    <FileText className="h-3.5 w-3.5 text-[#00875A]" /> อาการเบื้องต้น
+                                                </span>
                                                 <span className="font-medium text-xs sm:text-sm text-slate-900 block truncate" title={selectedRow?.OP_CHIEF || selectedRow?.OP_DETAIL || '-'}>
                                                     {selectedRow?.OP_CHIEF || selectedRow?.OP_DETAIL || '-'}
                                                 </span>
@@ -620,22 +607,9 @@ export default function PatientHistory({ patient, visits = [], hn }: PatientHist
 
                                     {/* ผลการวินิจฉัย (Diagnosis) */}
                                     <div className="p-2.5 liquid-glass-box rounded-xl space-y-1">
-                                        <div className="flex items-center justify-between">
-                                            <p className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
-                                                <Stethoscope className="h-3.5 w-3.5 text-[#00875A]" /> ผลการวินิจฉัย (Diagnosis)
-                                            </p>
-                                            {selectedRow && (
-                                                <Button
-                                                    onClick={handleOpenDiagModal}
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="h-6 px-2 text-[11px] font-bold text-[#00875A] hover:bg-[#E8F8F2] rounded-full flex items-center gap-1 cursor-pointer"
-                                                >
-                                                    <Edit3 className="h-3 w-3" />
-                                                    <span>{selectedRow?.OP_DIAG ? 'แก้ไข' : 'เพิ่ม'}</span>
-                                                </Button>
-                                            )}
-                                        </div>
+                                        <p className="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+                                            <Stethoscope className="h-3.5 w-3.5 text-[#00875A]" /> ผลการวินิจฉัย (Diagnosis)
+                                        </p>
                                         <p className="text-xs sm:text-sm text-slate-800 leading-relaxed font-medium">
                                             {selectedRow?.OP_DIAG || '-'}
                                         </p>

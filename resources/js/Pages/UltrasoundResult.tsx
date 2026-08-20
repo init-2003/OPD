@@ -56,6 +56,7 @@ import {
     Undo2,
     Redo2,
     RotateCcw,
+    RotateCw,
     Search,
     FileSymlink,
     FilePlus,
@@ -104,7 +105,7 @@ const PAGE_WIDTH = PAPER_WIDTH - (CARD_PADDING_X * 2); // 714px usable inner wid
 const EDITOR_W = PAGE_WIDTH - 2; // px actual editor text content width
 const LINE_H = 32.9; // px per line (matches 16pt mPDF line height)
 const DEFAULT_CAP_LINES = 23; // Exactly 23 lines per page
-const CARD_PADDING_Y = 40; // px top/bottom padding
+const CARD_PADDING_Y = 36; // px top/bottom padding
 
 const sanitizeHtml = (html: string) =>
     html
@@ -249,6 +250,9 @@ const PAGE_EXTENSIONS = [
         heading: {
             levels: [1, 2, 3],
         },
+        hardBreak: {
+            keepMarks: true,
+        },
     }),
     FontSize,
 ];
@@ -289,6 +293,17 @@ function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal,
                     edRef.current?.commands.insertContent('<p>[PAGE BREAK]</p>');
                     return true;
                 }
+                if (event.key === 'Enter' && event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey) {
+                    if (selectAllActiveRef.current) {
+                        globalEditRef.current('clear');
+                    }
+                    if (enterAtEndRef.current && enterAtEndRef.current(index)) {
+                        return true;
+                    }
+                    event.preventDefault();
+                    edRef.current?.commands.setHardBreak();
+                    return true;
+                }
                 if (event.key === 'Enter' && !event.shiftKey && !event.altKey && !event.ctrlKey && !event.metaKey && !selectAllActiveRef.current) {
                     if (enterAtEndRef.current && enterAtEndRef.current(index)) {
                         return true;
@@ -316,7 +331,7 @@ function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal,
                 }
                 if (selectAllActiveRef.current && !event.ctrlKey && !event.metaKey) {
                     if (event.key === 'Backspace' || event.key === 'Delete') return globalEditRef.current('clear');
-                    if (event.key === 'Enter' && !event.shiftKey && !event.altKey) return globalEditRef.current('clear');
+                    if (event.key === 'Enter' && !event.altKey) return globalEditRef.current('clear');
                     if (event.key.length === 1 && !event.altKey) return globalEditRef.current('replace', event.key);
                     selectAllActiveRef.current = false;
                 }
@@ -491,10 +506,8 @@ function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal,
             className="xray-page-editor"
             style={{
                 width: '100%',
-                height: pageHeight,
                 minHeight: pageHeight,
-                maxHeight: pageHeight,
-                overflow: 'hidden',
+                overflow: 'visible',
                 boxSizing: 'border-box',
             }}
             onScroll={(e) => {
@@ -571,7 +584,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
     }, [pages, savedBaseline]);
 
     const [linesPerPage, setLinesPerPage] = useState(DEFAULT_CAP_LINES);
-    const EDITOR_HEIGHT = Math.round(LINE_H * linesPerPage);
+    const EDITOR_HEIGHT = Math.round(LINE_H * linesPerPage) + 16;
     const CARD_HEIGHT = EDITOR_HEIGHT + (CARD_PADDING_Y * 2);
     const TA_HEIGHT = EDITOR_HEIGHT;
     const SAFE_TA_HEIGHT = Math.floor(TA_HEIGHT) - 5;
@@ -631,21 +644,22 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         const rendered = m.firstElementChild?.firstElementChild as HTMLElement;
         if (!rendered) return 1;
         const h = Math.max(rendered.offsetHeight, rendered.scrollHeight);
-        return Math.max(1, Math.round(h / LINE_H));
+        return Math.max(1, Math.ceil((h - 2) / LINE_H));
     };
 
-    // Calculate the total physical lines of an HTML string by summing its block lines
+    // Calculate the total physical lines of an HTML string directly from rendered DOM height
     const countHtmlLines = (html: string, m: HTMLElement): number => {
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        const blocks = Array.from(tmp.children) as HTMLElement[];
-        if (blocks.length === 0) return 0;
-
-        let total = 0;
-        for (const b of blocks) {
-            total += countBlockLines(b, m);
+        if (!html || !html.replace(/<p[^>]*>\s*<\/p>/gi, '').trim()) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html;
+            return Math.max(tmp.children.length, 1);
         }
-        return total;
+
+        m.innerHTML = `<div class="ProseMirror" style="width:${EDITOR_W}px!important;padding:0!important;margin:0!important;font-family:'Angsana New','Angsana',Tahoma,sans-serif!important;font-size:16pt!important;line-height:${LINE_H}px!important;box-sizing:border-box!important;">${html}</div>`;
+        const rendered = m.firstElementChild as HTMLElement;
+        if (!rendered) return 0;
+        const h = Math.max(rendered.offsetHeight, rendered.scrollHeight);
+        return Math.max(1, Math.ceil((h - 2) / LINE_H));
     };
 
     const countPhysicalLines = (m: HTMLElement, html: string): number => {
@@ -713,6 +727,36 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         if (tag !== 'p' && tag !== 'h1' && tag !== 'h2' && tag !== 'h3' && tag !== 'h4' && tag !== 'h5' && tag !== 'h6') {
             return [blockHtml];
         }
+
+        // If the block contains <br>, split by <br> sub-lines first
+        if (el.innerHTML.includes('<br')) {
+            const subLines = el.innerHTML.split(/<br\s*\/?>/i);
+            if (subLines.length > 1) {
+                const prefixLines: string[] = [];
+                const suffixLines: string[] = [];
+                const targetCap = typeof maxAvailableLines === 'number'
+                    ? countHtmlLines(currentHtml, m) + maxAvailableLines
+                    : linesPerPage;
+
+                for (let i = 0; i < subLines.length; i++) {
+                    const testPrefix = `<${tag}>${[...prefixLines, subLines[i]].join('<br/>')}</${tag}>`;
+                    if (countHtmlLines(currentHtml + testPrefix, m) <= targetCap) {
+                        prefixLines.push(subLines[i]);
+                    } else {
+                        suffixLines.push(...subLines.slice(i));
+                        break;
+                    }
+                }
+
+                if (prefixLines.length > 0 && suffixLines.length > 0) {
+                    return [
+                        `<${tag}>${prefixLines.join('<br/>')}</${tag}>`,
+                        `<${tag}>${suffixLines.join('<br/>')}</${tag}>`,
+                    ];
+                }
+            }
+        }
+
         const text = el.textContent || '';
         if (!text.trim()) return [blockHtml];
 
@@ -1420,7 +1464,8 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
             return () => clearTimeout(timer);
         }
     }, [hasDbData]);
-    const [customPresets, setCustomPresets] = useState<PresetItem[]>(loadSavedPresets);
+    const [presetsList, setPresetsList] = useState<PresetItem[]>(dbPresets);
+    const [isSavingPreset, setIsSavingPreset] = useState(false);
     const [presetSearch, setPresetSearch] = useState('');
     const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
     const [fontSizeDropdownOpen, setFontSizeDropdownOpen] = useState(false);
@@ -1515,49 +1560,209 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         };
     }, [zoomMode, sidebarOpen]);
 
-    const allPresets = [...customPresets, ...dbPresets];
-    const filteredPresets = allPresets.filter((p) => {
+    const filteredPresets = presetsList.filter((p) => {
         if (!presetSearch.trim()) return true;
         const q = presetSearch.toLowerCase();
         return p.label.toLowerCase().includes(q) || p.text.toLowerCase().includes(q);
     });
 
-    const handleAddPreset = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newPresetLabel.trim() || !newPresetText.trim()) return;
+    const [editingPreset, setEditingPreset] = useState<PresetItem | null>(null);
 
-        const newItem: PresetItem = {
-            id: Date.now().toString(),
-            label: newPresetLabel.trim(),
-            text: newPresetText.trim(),
+    // Right-Click Context Menu for Presets
+    const [presetContextMenu, setPresetContextMenu] = useState<{
+        isOpen: boolean;
+        x: number;
+        y: number;
+        preset: PresetItem | null;
+    }>({
+        isOpen: false,
+        x: 0,
+        y: 0,
+        preset: null,
+    });
+
+    const handlePresetContextMenu = (e: React.MouseEvent, p: PresetItem) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const menuWidth = 180;
+        const menuHeight = 110;
+        const x = Math.min(e.clientX, window.innerWidth - menuWidth - 12);
+        const y = Math.min(e.clientY, window.innerHeight - menuHeight - 12);
+
+        setPresetContextMenu({
+            isOpen: true,
+            x: Math.max(12, x),
+            y: Math.max(12, y),
+            preset: p,
+        });
+    };
+
+    const handleClosePresetContextMenu = () => {
+        setPresetContextMenu((prev) => (prev.isOpen ? { ...prev, isOpen: false } : prev));
+    };
+
+    // Close preset context menu on window click or ESC key
+    useEffect(() => {
+        if (!presetContextMenu.isOpen) return;
+
+        const handleClickOutside = (e: MouseEvent) => {
+            const target = e.target as HTMLElement;
+            if (!target.closest('#preset-context-menu')) {
+                handleClosePresetContextMenu();
+            }
         };
 
-        const updated = [...customPresets, newItem];
-        setCustomPresets(updated);
-        try {
-            localStorage.setItem('xray_custom_presets', JSON.stringify(updated));
-        } catch (err) { }
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                handleClosePresetContextMenu();
+            }
+        };
 
+        window.addEventListener('mousedown', handleClickOutside);
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [presetContextMenu.isOpen]);
+
+    // Long Press Support for iPad / Touch devices on Presets
+    const presetLongPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const presetTouchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const isPresetLongPressTriggeredRef = useRef<boolean>(false);
+
+    const handlePresetTouchStart = (e: React.TouchEvent, p: PresetItem) => {
+        const touch = e.touches[0];
+        presetTouchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+        isPresetLongPressTriggeredRef.current = false;
+
+        if (presetLongPressTimerRef.current) {
+            clearTimeout(presetLongPressTimerRef.current);
+        }
+
+        presetLongPressTimerRef.current = setTimeout(() => {
+            isPresetLongPressTriggeredRef.current = true;
+            const menuWidth = 180;
+            const menuHeight = 110;
+            const x = Math.min(touch.clientX, window.innerWidth - menuWidth - 12);
+            const y = Math.min(touch.clientY, window.innerHeight - menuHeight - 12);
+
+            setPresetContextMenu({
+                isOpen: true,
+                x: Math.max(12, x),
+                y: Math.max(12, y),
+                preset: p,
+            });
+        }, 480);
+    };
+
+    const handlePresetTouchMove = (e: React.TouchEvent) => {
+        if (!presetLongPressTimerRef.current) return;
+        const touch = e.touches[0];
+        const moveDist = Math.hypot(
+            touch.clientX - presetTouchStartPosRef.current.x,
+            touch.clientY - presetTouchStartPosRef.current.y
+        );
+        if (moveDist > 8) {
+            clearTimeout(presetLongPressTimerRef.current);
+            presetLongPressTimerRef.current = null;
+        }
+    };
+
+    const handlePresetTouchEnd = () => {
+        if (presetLongPressTimerRef.current) {
+            clearTimeout(presetLongPressTimerRef.current);
+            presetLongPressTimerRef.current = null;
+        }
+    };
+
+    const handleOpenAddPreset = () => {
+        setEditingPreset(null);
         setNewPresetLabel('');
         setNewPresetText('');
-        setIsAddPresetOpen(false);
+        setIsAddPresetOpen(true);
     };
 
-    const handleDeletePreset = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        const updated = customPresets.filter((p) => p.id !== id);
-        setCustomPresets(updated);
+    const handleOpenEditPreset = (p: PresetItem) => {
+        setEditingPreset(p);
+        setNewPresetLabel(p.label);
+        setNewPresetText(p.text);
+        setIsAddPresetOpen(true);
+        handleClosePresetContextMenu();
+    };
+
+    const handleSavePresetForm = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newPresetLabel.trim() || !newPresetText.trim() || isSavingPreset) return;
+
+        setIsSavingPreset(true);
         try {
-            localStorage.setItem('xray_custom_presets', JSON.stringify(updated));
-        } catch (err) { }
+            if (editingPreset) {
+                // Update existing preset
+                const res = await axios.put(route('presets.update', { id: editingPreset.id }), {
+                    name: newPresetLabel.trim(),
+                    result: newPresetText.trim(),
+                });
+
+                if (res.data?.preset) {
+                    const updatedItem: PresetItem = res.data.preset;
+                    setPresetsList((prev) =>
+                        prev.map((item) => (item.id === editingPreset.id ? updatedItem : item))
+                    );
+                    setEditingPreset(null);
+                    setNewPresetLabel('');
+                    setNewPresetText('');
+                    setIsAddPresetOpen(false);
+                    triggerSaveToast();
+                }
+            } else {
+                // Create new preset
+                const res = await axios.post(route('presets.store'), {
+                    name: newPresetLabel.trim(),
+                    result: newPresetText.trim(),
+                });
+
+                if (res.data?.preset) {
+                    const newItem: PresetItem = res.data.preset;
+                    setPresetsList((prev) => [...prev, newItem]);
+                    setNewPresetLabel('');
+                    setNewPresetText('');
+                    setIsAddPresetOpen(false);
+                    triggerSaveToast();
+                }
+            }
+        } catch (err: any) {
+            console.error('Error saving preset to DB:', err);
+            alert('เกิดข้อผิดพลาดในการบันทึก Preset: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setIsSavingPreset(false);
+        }
     };
 
-    const handleResetPresets = () => {
-        if (confirm('คุณต้องการรีเซ็ตข้อความสำเร็จรูปส่วนตัวเป็นค่าเริ่มต้นหรือไม่?')) {
-            setCustomPresets(DEFAULT_PRESETS);
-            try {
-                localStorage.removeItem('xray_custom_presets');
-            } catch (err) { }
+    const handleDeletePreset = async (id: string, e?: React.MouseEvent) => {
+        if (e) e.stopPropagation();
+        handleClosePresetContextMenu();
+
+        if (!confirm('คุณต้องการลบ Preset นี้ออกจากฐานข้อมูลหรือไม่?')) return;
+
+        try {
+            await axios.delete(route('presets.destroy', { id }));
+            setPresetsList((prev) => prev.filter((p) => p.id !== id));
+        } catch (err: any) {
+            console.error('Error deleting preset:', err);
+            alert('เกิดข้อผิดพลาดในการลบ Preset: ' + (err.response?.data?.message || err.message));
+        }
+    };
+
+    const handleRefreshPresets = async () => {
+        try {
+            const res = await axios.get(route('presets.index'));
+            if (res.data?.presets) {
+                setPresetsList(res.data.presets);
+            }
+        } catch (err) {
+            console.error('Failed to reload presets:', err);
         }
     };
 
@@ -1606,6 +1811,16 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
 
             handleSetIsEditing(false);
             triggerSaveToast();
+
+            // Dismiss patient from notification bell immediately
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(
+                    new CustomEvent('opd-dismiss-patient-notification', {
+                        detail: { hn, vt: patient?.VT_NO },
+                    })
+                );
+            }
+
             onSaved?.();
         } catch (error) {
             console.error('Error saving ultrasound result:', error);
@@ -1958,16 +2173,46 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                         {filteredPresets.map((preset) => (
                                             <div
                                                 key={preset.id}
-                                                onClick={() => insertPreset(preset.text)}
-                                                className="w-full h-[88px] text-left p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-[#00875A] hover:bg-[#E8F8F2]/30 transition-all duration-150 group flex flex-col justify-between cursor-pointer relative overflow-hidden shrink-0"
+                                                onClick={() => {
+                                                    if (isPresetLongPressTriggeredRef.current) return;
+                                                    insertPreset(preset.text);
+                                                }}
+                                                onContextMenu={(e) => handlePresetContextMenu(e, preset)}
+                                                onTouchStart={(e) => handlePresetTouchStart(e, preset)}
+                                                onTouchMove={handlePresetTouchMove}
+                                                onTouchEnd={handlePresetTouchEnd}
+                                                onTouchCancel={handlePresetTouchEnd}
+                                                className="w-full h-[88px] text-left p-2.5 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-[#00875A] hover:bg-[#E8F8F2]/30 transition-all duration-150 group flex flex-col justify-between cursor-pointer relative overflow-hidden shrink-0 select-none"
+                                                title="คลิกเพื่อแทรก / คลิกขวาเพื่อแก้ไขหรือลบ"
                                             >
                                                 <div className="flex items-center justify-between gap-1 shrink-0">
                                                     <span className="font-bold text-slate-800 group-hover:text-[#007A4D] text-xs flex items-center gap-1 truncate" title={preset.label}>
                                                         <Plus className="h-3 w-3 text-[#00875A] shrink-0" /> {preset.label}
                                                     </span>
-                                                    <Badge variant="outline" className="bg-white text-[10px] px-1.5 py-0 text-slate-500 border-slate-200 group-hover:border-[#A7F3D0] group-hover:text-[#007A4D] shrink-0">
-                                                        แทรก
-                                                    </Badge>
+                                                    <div className="flex items-center gap-1 shrink-0">
+                                                        <Badge variant="outline" className="bg-white text-[10px] px-1.5 py-0 text-slate-500 border-slate-200 group-hover:border-[#A7F3D0] group-hover:text-[#007A4D]">
+                                                            แทรก
+                                                        </Badge>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenEditPreset(preset);
+                                                            }}
+                                                            className="h-5 w-5 rounded p-0 text-slate-400 hover:text-[#00875A] hover:bg-[#E8F8F2] flex items-center justify-center transition-colors cursor-pointer"
+                                                            title="แก้ไข Preset นี้"
+                                                        >
+                                                            <Edit3 className="h-3 w-3" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleDeletePreset(preset.id, e)}
+                                                            className="h-5 w-5 rounded p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
+                                                            title="ลบ Preset นี้ออกจากฐานข้อมูล"
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                                 <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed italic pr-1 overflow-hidden h-[34px]">
                                                     "{preset.text}"
@@ -2454,11 +2699,9 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                                     }}
                                                     style={{
                                                         width: PAPER_WIDTH,
-                                                        height: CARD_HEIGHT,
-                                                        maxHeight: CARD_HEIGHT,
                                                         minHeight: CARD_HEIGHT,
                                                         padding: `${CARD_PADDING_Y}px ${CARD_PADDING_X}px`,
-                                                        overflow: 'hidden',
+                                                        overflow: 'visible',
                                                         boxSizing: 'border-box',
                                                         flexShrink: 0,
                                                     }}
@@ -2543,7 +2786,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                         type="button"
                                         size="sm"
                                         className="h-7 px-2.5 text-[11px] liquid-glass-btn-primary text-white font-bold rounded-lg flex items-center gap-0.5 shadow-md cursor-pointer"
-                                        onClick={() => setIsAddPresetOpen(true)}
+                                        onClick={handleOpenAddPreset}
                                     >
                                         <Plus className="h-3 w-3" /> เพิ่ม
                                     </Button>
@@ -2551,11 +2794,11 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                         type="button"
                                         variant="ghost"
                                         size="sm"
-                                        className="h-7 w-7 p-0 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
-                                        title="รีเซ็ตเป็นค่าเริ่มต้น"
-                                        onClick={handleResetPresets}
+                                        className="h-7 w-7 p-0 text-slate-400 hover:text-[#00875A] hover:bg-[#E8F8F2] rounded-lg cursor-pointer transition-colors"
+                                        title="รีโหลด Preset จากฐานข้อมูล"
+                                        onClick={handleRefreshPresets}
                                     >
-                                        <RotateCcw className="h-3.5 w-3.5" />
+                                        <RotateCw className="h-3.5 w-3.5" />
                                     </Button>
                                 </div>
                             </CardHeader>
@@ -2588,8 +2831,17 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                         filteredPresets.map((p) => (
                                             <div
                                                 key={p.id}
-                                                onClick={() => insertPreset(p.text)}
-                                                className="w-full h-[88px] text-left p-2.5 rounded-xl liquid-glass-box hover:border-[#00875A] hover:bg-[#E8F8F2]/30 transition-all duration-150 group flex flex-col justify-between cursor-pointer relative overflow-hidden shrink-0"
+                                                onClick={() => {
+                                                    if (isPresetLongPressTriggeredRef.current) return;
+                                                    insertPreset(p.text);
+                                                }}
+                                                onContextMenu={(e) => handlePresetContextMenu(e, p)}
+                                                onTouchStart={(e) => handlePresetTouchStart(e, p)}
+                                                onTouchMove={handlePresetTouchMove}
+                                                onTouchEnd={handlePresetTouchEnd}
+                                                onTouchCancel={handlePresetTouchEnd}
+                                                className="w-full h-[88px] text-left p-2.5 rounded-xl liquid-glass-box hover:border-[#00875A] hover:bg-[#E8F8F2]/30 transition-all duration-150 group flex flex-col justify-between cursor-pointer relative overflow-hidden shrink-0 select-none"
+                                                title="คลิกเพื่อแทรก / คลิกขวาเพื่อแก้ไขหรือลบ"
                                             >
                                                 <div className="flex items-center justify-between gap-1 shrink-0">
                                                     <span className="font-bold text-slate-800 group-hover:text-[#007A4D] text-xs flex items-center gap-1 truncate" title={p.label}>
@@ -2599,16 +2851,25 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                                         <Badge variant="outline" className="bg-white text-[10px] px-1.5 py-0 text-slate-500 border-slate-200 group-hover:border-[#A7F3D0] group-hover:text-[#007A4D]">
                                                             แทรก
                                                         </Badge>
-                                                        {p.id.startsWith('db_') ? null : (
-                                                            <button
-                                                                type="button"
-                                                                onClick={(e) => handleDeletePreset(p.id, e)}
-                                                                className="h-5 w-5 rounded p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors"
-                                                                title="ลบข้อความส่วนตัวนี้"
-                                                            >
-                                                                <Trash2 className="h-3 w-3" />
-                                                            </button>
-                                                        )}
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenEditPreset(p);
+                                                            }}
+                                                            className="h-5 w-5 rounded p-0 text-slate-400 hover:text-[#00875A] hover:bg-[#E8F8F2] flex items-center justify-center transition-colors cursor-pointer"
+                                                            title="แก้ไข Preset นี้"
+                                                        >
+                                                            <Edit3 className="h-3 w-3" />
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => handleDeletePreset(p.id, e)}
+                                                            className="h-5 w-5 rounded p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors cursor-pointer"
+                                                            title="ลบ Preset นี้ออกจากฐานข้อมูล"
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </button>
                                                     </div>
                                                 </div>
                                                 <p className="text-[11px] text-slate-600 line-clamp-2 leading-relaxed italic pr-1 overflow-hidden h-[34px]">
@@ -2624,17 +2885,26 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                 </div>
             </div>
 
-            {/* Modal Form for Adding Custom Preset */}
+            {/* Modal Form for Adding / Editing Preset */}
             <Dialog open={isAddPresetOpen} onOpenChange={setIsAddPresetOpen}>
                 <DialogContent className="sm:max-w-2xl w-full bg-white rounded-2xl p-7 shadow-2xl border border-slate-200">
                     <DialogHeader>
                         <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-                            <Sparkles className="h-5 w-5 text-[#00875A]" />
-                            เพิ่ม Preset ใหม่ (Custom Preset)
+                            {editingPreset ? (
+                                <>
+                                    <Edit3 className="h-5 w-5 text-[#00875A]" />
+                                    แก้ไข Preset (PHM_XRAY)
+                                </>
+                            ) : (
+                                <>
+                                    <Sparkles className="h-5 w-5 text-[#00875A]" />
+                                    เพิ่ม Preset ใหม่ (บันทึกลงฐานข้อมูล PHM_XRAY)
+                                </>
+                            )}
                         </DialogTitle>
                     </DialogHeader>
 
-                    <form onSubmit={handleAddPreset} className="space-y-5 pt-2">
+                    <form onSubmit={handleSavePresetForm} className="space-y-5 pt-2">
                         <div className="space-y-2">
                             <Label className="text-sm font-bold text-slate-700">
                                 ชื่อปุ่ม / หัวข้อข้อความ <span className="text-rose-500">*</span>
@@ -2668,16 +2938,29 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                 type="button"
                                 variant="outline"
                                 onClick={() => setIsAddPresetOpen(false)}
-                                className="h-10 px-5 text-sm font-bold rounded-xl border-slate-300 hover:bg-slate-100"
+                                className="h-10 px-5 text-sm font-bold rounded-xl border-slate-300 hover:bg-slate-100 cursor-pointer"
                             >
                                 ยกเลิก
                             </Button>
                             <Button
                                 type="submit"
-                                className="h-10 px-6 liquid-glass-btn-primary text-white text-sm font-bold rounded-xl shadow-sm"
+                                disabled={isSavingPreset}
+                                className="h-10 px-6 liquid-glass-btn-primary text-white text-sm font-bold rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5"
                             >
-                                <Plus className="h-4 w-4 mr-1.5" />
-                                บันทึกข้อความสำเร็จรูป
+                                {isSavingPreset ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : editingPreset ? (
+                                    <Edit3 className="h-4 w-4 mr-1.5" />
+                                ) : (
+                                    <Plus className="h-4 w-4 mr-1.5" />
+                                )}
+                                <span>
+                                    {isSavingPreset
+                                        ? 'กำลังบันทึก...'
+                                        : editingPreset
+                                            ? 'บันทึกการแก้ไข'
+                                            : 'บันทึกลงฐานข้อมูล (PHM_XRAY)'}
+                                </span>
                             </Button>
                         </DialogFooter>
                     </form>
@@ -2762,6 +3045,47 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                     // Inertia will reload page props automatically on post
                 }}
             />
+
+            {/* Floating 3D Liquid Glass Context Menu for Presets */}
+            {presetContextMenu.isOpen && presetContextMenu.preset && (
+                <div
+                    id="preset-context-menu"
+                    className="fixed z-[100] min-w-[150px] bg-white/95 backdrop-blur-md rounded-2xl p-1 shadow-2xl border border-slate-200/80 animate-in fade-in-50 zoom-in-95 duration-100 select-none"
+                    style={{
+                        top: `${presetContextMenu.y}px`,
+                        left: `${presetContextMenu.x}px`,
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                >
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (presetContextMenu.preset) {
+                                handleOpenEditPreset(presetContextMenu.preset);
+                            }
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-bold text-slate-700 hover:text-[#007A4D] hover:bg-[#E8F8F2] rounded-xl transition-colors cursor-pointer text-left"
+                    >
+                        <Edit3 className="h-3.5 w-3.5 text-[#00875A]" />
+                        <span>แก้ไข Preset</span>
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={(e) => {
+                            if (presetContextMenu.preset) {
+                                const p = presetContextMenu.preset;
+                                handleClosePresetContextMenu();
+                                handleDeletePreset(p.id, e);
+                            }
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer text-left"
+                    >
+                        <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+                        <span>ลบ Preset</span>
+                    </button>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }

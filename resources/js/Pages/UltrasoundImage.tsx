@@ -63,6 +63,7 @@ import {
     ImageIcon,
     CheckCheck,
     Filter,
+    ExternalLink,
 } from 'lucide-react';
 import { formatVitalValue, cleanDecimals, formatPatientAge } from '@/lib/utils';
 
@@ -411,6 +412,63 @@ export default function UltrasoundImage({
 
     const handleCloseContextMenu = () => {
         setContextMenu((prev) => (prev.isOpen ? { ...prev, isOpen: false } : prev));
+    };
+
+    // Long Press Handler for iPad & Touch Devices
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const touchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+    const isLongPressTriggeredRef = useRef<boolean>(false);
+
+    const handleTouchStart = (e: React.TouchEvent, img: XrayImageItem, visitVtNo?: number) => {
+        if (e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
+        isLongPressTriggeredRef.current = false;
+
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+        }
+
+        longPressTimerRef.current = setTimeout(() => {
+            isLongPressTriggeredRef.current = true;
+            if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+                try { navigator.vibrate(40); } catch (err) { }
+            }
+
+            const menuWidth = 190;
+            const menuHeight = 135;
+            const x = Math.min(touch.clientX, window.innerWidth - menuWidth - 12);
+            const y = Math.min(touch.clientY, window.innerHeight - menuHeight - 12);
+
+            setContextMenu({
+                isOpen: true,
+                x: Math.max(12, x),
+                y: Math.max(12, y),
+                image: img,
+                visitVtNo,
+            });
+        }, 480); // 480ms standard iPad long-press duration
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (!longPressTimerRef.current) return;
+        if (e.touches.length > 0) {
+            const touch = e.touches[0];
+            const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+            const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+            // Cancel long-press if moved more than 8px (user is scrolling)
+            if (dx > 8 || dy > 8) {
+                clearTimeout(longPressTimerRef.current);
+                longPressTimerRef.current = null;
+            }
+        }
+    };
+
+    const handleTouchEnd = () => {
+        if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+        }
     };
 
     useEffect(() => {
@@ -840,13 +898,23 @@ export default function UltrasoundImage({
             <div
                 key={img.id}
                 onClick={() => {
+                    // If long-press triggered the context menu, ignore the click to avoid opening lightbox
+                    if (isLongPressTriggeredRef.current) {
+                        isLongPressTriggeredRef.current = false;
+                        return;
+                    }
                     if (isSelectionMode) {
                         handleToggleSelectImage(img.filename);
                     } else {
                         handleOpenLightbox(img);
                     }
                 }}
+                onTouchStart={(e) => handleTouchStart(e, img, visitVtNo)}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                onTouchCancel={handleTouchEnd}
                 onContextMenu={(e) => handleContextMenu(e, img, visitVtNo)}
+                style={{ WebkitTouchCallout: 'none' }}
                 className={`group relative aspect-square rounded-none overflow-hidden border transition-all duration-200 cursor-pointer select-none bg-slate-950 shadow-xs hover:shadow-md touch-manipulation ${isSelected
                     ? 'border-[#00875A] ring-3 ring-[#00875A] scale-[0.98]'
                     : 'border-slate-800/40 hover:border-slate-600'
@@ -856,8 +924,9 @@ export default function UltrasoundImage({
                 <img
                     src={img.url}
                     alt={img.filename}
-                    className={`w-full h-full object-cover transition-transform duration-300 pointer-events-none ${isSelected ? 'scale-105 opacity-90' : 'group-hover:scale-105'
+                    className={`w-full h-full object-cover transition-transform duration-300 pointer-events-none select-none ${isSelected ? 'scale-105 opacity-90' : 'group-hover:scale-105'
                         }`}
+                    style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
                     loading="lazy"
                 />
 
@@ -1802,6 +1871,17 @@ export default function UltrasoundImage({
                         >
                             <Printer className="h-4 w-4 text-slate-900 shrink-0" />
                             <span>พิมพ์ PDF รูปภาพนี้</span>
+                        </a>
+
+                        <a
+                            href={contextMenu.image.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold rounded-xl text-slate-800 hover:bg-black/6 active:bg-black/10 transition-colors cursor-pointer text-left"
+                            onClick={() => handleCloseContextMenu()}
+                        >
+                            <ExternalLink className="h-4 w-4 text-slate-900 shrink-0" />
+                            <span>เปิดในแท็บใหม่</span>
                         </a>
 
                         <a

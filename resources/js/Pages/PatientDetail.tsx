@@ -123,6 +123,14 @@ export default function PatientDetail({ patient, hn, xrayImageCount = 0 }: Patie
         setIsUpdatingStatus(true);
         setCurrentStatus(newStatus);
 
+        if (typeof window !== 'undefined') {
+            window.dispatchEvent(
+                new CustomEvent('opd-dismiss-patient-notification', {
+                    detail: { hn: patient.op_hn || hn, vt: patient.VT_NO },
+                })
+            );
+        }
+
         router.post(
             route('patient.medical_info.update', { hn: patient.op_hn || hn }),
             {

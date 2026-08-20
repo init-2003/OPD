@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 
-interface DatePickerProps {
+export interface DatePickerProps {
     value: string;
     onChange: (date: string) => void;
     displayDate?: string;
@@ -16,13 +16,18 @@ const THAI_MONTHS = [
 
 const WEEKDAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 
-export function DatePicker({ value, onChange, displayDate }: DatePickerProps) {
+export const DatePicker = React.forwardRef<HTMLButtonElement, DatePickerProps>(function DatePicker(
+    { value, onChange, displayDate },
+    forwardedRef
+) {
     const [isOpen, setIsOpen] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
     const [isVisible, setIsVisible] = useState(false);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const popoverRef = useRef<HTMLDivElement>(null);
     const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
+
+    React.useImperativeHandle(forwardedRef, () => buttonRef.current!);
 
     const getInitialDate = () => {
         if (value && value !== 'all' && pregMatchDate(value)) {
@@ -152,14 +157,11 @@ export function DatePicker({ value, onChange, displayDate }: DatePickerProps) {
                 ref={buttonRef}
                 type="button"
                 onClick={() => setIsOpen(!isOpen)}
-                className={`h-9 px-3.5 text-xs sm:text-sm font-bold rounded-full flex items-center gap-1.5 sm:gap-2 transition-all duration-200 cursor-pointer select-none ${isDateActive
-                        ? 'liquid-glass-btn-primary text-white shadow-sm'
-                        : 'bg-transparent text-slate-700 hover:text-[#00875A] hover:bg-white/60'
-                    }`}
+                className="relative z-10 h-9 w-[146px] px-2 text-xs sm:text-sm font-bold rounded-full flex items-center justify-center gap-1.5 sm:gap-2 transition-colors duration-200 cursor-pointer select-none bg-transparent"
             >
-                <CalendarIcon className={`h-4 w-4 shrink-0 ${isDateActive ? 'text-white' : 'text-[#00875A]'}`} />
-                <span className={`whitespace-nowrap ${isDateActive ? 'text-white' : 'text-slate-700'}`}>{formatDisplay()}</span>
-                <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''} ${isDateActive ? 'text-white' : 'text-slate-400'}`} />
+                <CalendarIcon className={`h-4 w-4 shrink-0 transition-colors duration-200 ${isDateActive ? 'text-white' : 'text-[#00875A]'}`} />
+                <span className={`whitespace-nowrap transition-colors duration-200 ${isDateActive ? 'text-white' : 'text-slate-700 hover:text-[#00875A]'}`}>{formatDisplay()}</span>
+                <ChevronDown className={`h-3.5 w-3.5 transition-all duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''} ${isDateActive ? 'text-white/90' : 'text-slate-400'}`} />
             </button>
 
             {isMounted && popoverPos && createPortal(
@@ -279,4 +281,4 @@ export function DatePicker({ value, onChange, displayDate }: DatePickerProps) {
             )}
         </>
     );
-}
+});

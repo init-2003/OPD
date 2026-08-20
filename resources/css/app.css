@@ -112,7 +112,7 @@
 }
 
 .xray-page-editor>div {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .xray-page-editor p,
@@ -164,17 +164,8 @@
   cursor: text;
 }
 
-/* Guard against ProseMirror adding double <br> in empty paragraphs */
-.xray-page-editor .ProseMirror br + br.ProseMirror-trailingBreak,
-.xray-page-editor .ProseMirror br.ProseMirror-trailingBreak:not(:only-child) {
-  display: none !important;
-}
-
-.xray-page-editor .ProseMirror p:empty,
-.xray-page-editor .ProseMirror p:has(> br:only-child) {
+.xray-page-editor .ProseMirror p:empty {
   min-height: 32.9px !important;
-  max-height: 32.9px !important;
-  height: 32.9px !important;
   line-height: 32.9px !important;
 }
 

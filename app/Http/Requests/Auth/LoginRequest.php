@@ -61,7 +61,7 @@ class LoginRequest extends FormRequest
             'password' => $this->string('password'),
         ];
 
-        $allowed = Auth::attempt($credentials, $this->boolean('remember'), function ($user) {
+        $allowed = Auth::attempt($credentials, false, function ($user) {
             return $this->hasAccess($user);
         });
 
@@ -80,7 +80,7 @@ class LoginRequest extends FormRequest
             }
 
             throw ValidationException::withMessages([
-                'PB_user' => trans('auth.failed'),
+                'PB_user' => 'รหัสผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง',
             ]);
         }
 

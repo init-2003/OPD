@@ -129,7 +129,7 @@ class PatientPdfController extends Controller
             'default_font' => 'angsananew',
             'margin_left' => 10.0,
             'margin_right' => 8.4,
-            'margin_top' => 65.0,
+            'margin_top' => 70.3,
             'margin_bottom' => 26.5,
             'watermarkImgBehind' => true,
         ]);
@@ -248,7 +248,7 @@ class PatientPdfController extends Controller
         // findings per 1 PDF page. Rich HTML blocks stay intact; only pure
         // text is split across pages.
         $findingsTextWidth = 540.0;   // pt: A4 width 595.28 - margins (10mm + 8.4mm)
-        $maxFindingsLines = 23; // 23 lines per page (matches editor)
+        $maxFindingsLines = 23; // 23 lines per page (fits with margin_top 73.7mm and margin_bottom 20.0mm)
 
         $mpdf->SetFont('angsananew', '', 16);
 
@@ -341,12 +341,15 @@ class PatientPdfController extends Controller
                 $curText = '';
             };
             foreach (preg_split('/(<[^>]+>)/', $pageContent, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY) as $tok) {
-                if (preg_match('/^<\/?(?:p|div|br|li|tr|ul|ol|h[1-6]|blockquote|section|table)\b/i', $tok)) {
+                if (preg_match('/^<\/?(?:p|div|li|tr|ul|ol|h[1-6]|blockquote|section|table)\b/i', $tok)) {
                     $curHtml .= $tok;
                     $curText .= ' ';
-                    if (preg_match('/^<\/(?:p|div|li|tr|h[1-6]|blockquote|table)\b/i', $tok) || preg_match('/^<br\b/i', $tok)) {
+                    if (preg_match('/^<\/(?:p|div|li|tr|h[1-6]|blockquote|table)\b/i', $tok)) {
                         $flushBlock();
                     }
+                } else if (preg_match('/^<br\b/i', $tok)) {
+                    $curHtml .= '<br/>';
+                    $curText .= "\n";
                 } else {
                     $curHtml .= $tok;
                     $curText .= $tok;

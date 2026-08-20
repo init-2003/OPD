@@ -474,6 +474,13 @@ class PatientPdfController extends Controller
     public function downloadUltrasoundImagePdf(Request $request, string $hn)
     {
         $filename = basename((string)$request->query('filename', ''));
+        $vtId = $request->query('vt_id');
+        if (!empty($vtId) && preg_match('/^\d+/', (string)$vtId, $m)) {
+            $vtId = $m[0];
+        } else if (!is_numeric($vtId)) {
+            $vtId = null;
+        }
+
         $vtNo = $request->query('vt');
         if (!empty($vtNo) && preg_match('/^\d+/', (string)$vtNo, $m)) {
             $vtNo = $m[0];
@@ -486,7 +493,10 @@ class PatientPdfController extends Controller
         Where a.op_hn = :hn and a.op_hn = b.op_hn";
 
         $bindings = ['hn' => $hn];
-        if ($vtNo) {
+        if ($vtId) {
+            $query .= " and b.vt_id = :vtId";
+            $bindings['vtId'] = $vtId;
+        } elseif ($vtNo) {
             $query .= " and b.VT_NO = :vt";
             $bindings['vt'] = $vtNo;
         }

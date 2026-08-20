@@ -187,6 +187,13 @@ class PatientUltrasoundController extends Controller
      */
     public function showUltrasoundUploadPage(Request $request, string $hn): Response
     {
+        $vtId = $request->query('vt_id');
+        if (!empty($vtId) && preg_match('/^\d+/', (string)$vtId, $m)) {
+            $vtId = $m[0];
+        } else if (!is_numeric($vtId)) {
+            $vtId = null;
+        }
+
         $vtNo = $request->query('vt');
         if (!empty($vtNo) && preg_match('/^\d+/', (string)$vtNo, $m)) {
             $vtNo = $m[0];
@@ -289,13 +296,15 @@ class PatientUltrasoundController extends Controller
                 $data['formatted_date'] = '';
             }
 
-            // Count images belonging to this visit
+            // Count images belonging to this visit (prioritizing vt_id)
             $count = 0;
             foreach ($allImages as $img) {
                 $imgVtId = isset($img['vt_id']) && $img['vt_id'] !== '' ? (int) $img['vt_id'] : null;
                 $imgVtNo = isset($img['vt_no']) && $img['vt_no'] !== '' ? (int) $img['vt_no'] : null;
 
-                if (($imgVtId && $vtId && $imgVtId === $vtId) || ($imgVtNo && $vtNo && $imgVtNo === $vtNo)) {
+                if ($imgVtId && $vtId && $imgVtId === $vtId) {
+                    $count++;
+                } elseif (!$imgVtId && $imgVtNo && $vtNo && $imgVtNo === $vtNo) {
                     $count++;
                 }
             }
@@ -316,7 +325,7 @@ class PatientUltrasoundController extends Controller
             $isAssigned = false;
             if ($imgVtId && in_array($imgVtId, $validVtIds, true)) {
                 $isAssigned = true;
-            } elseif ($imgVtNo && in_array($imgVtNo, $validVtNos, true)) {
+            } elseif (!$imgVtId && $imgVtNo && in_array($imgVtNo, $validVtNos, true)) {
                 $isAssigned = true;
             }
 
@@ -327,9 +336,17 @@ class PatientUltrasoundController extends Controller
 
         // 6. Set Active / Default Visit
         $activeVisit = null;
-        if ($vtNo !== null) {
+        if (!empty($vtId)) {
             foreach ($visits as $v) {
-                if ((string)($v['VT_NO'] ?? '') === (string)$vtNo) {
+                if ((string)($v['VT_ID'] ?? '') === (string)$vtId) {
+                    $activeVisit = $v;
+                    break;
+                }
+            }
+        }
+        if (!$activeVisit && !empty($vtNo)) {
+            foreach ($visits as $v) {
+                if ((string)($v['VT_ID'] ?? '') === (string)$vtNo || (string)($v['VT_NO'] ?? '') === (string)$vtNo) {
                     $activeVisit = $v;
                     break;
                 }

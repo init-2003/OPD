@@ -115,34 +115,49 @@ export default function UltrasoundImage({
 }: UltrasoundImageProps) {
     const fromParam = new URLSearchParams(window.location.search).get('from') || '';
 
-    // Multi-select Visits State: Array of selected VT_NOs (or 'unassigned')
-    // Restores from URL query params (?vt=23 or ?vts=23,24) and sessionStorage on refresh
-    const [selectedVtNos, setSelectedVtNos] = useState<(number | 'unassigned')[]>(() => {
+    // Multi-select Visits State: Array of selected VT_IDs (or 'unassigned')
+    // Restores from URL query params (?vt_id=... or ?vt_ids=... or ?vt=...) and sessionStorage on refresh
+    const [selectedVtIds, setSelectedVtIds] = useState<(number | 'unassigned')[]>(() => {
         if (typeof window === 'undefined') return [];
         const urlParams = new URLSearchParams(window.location.search);
-        const queryVts = urlParams.get('vts');
-        if (queryVts) {
-            const parsed = queryVts
+        const queryVtIds = urlParams.get('vt_ids') || urlParams.get('vts');
+        if (queryVtIds) {
+            const parsed = queryVtIds
                 .split(',')
                 .map((s) => s.trim() === 'unassigned' ? 'unassigned' : Number(s.trim()))
                 .filter((x) => x === 'unassigned' || (!isNaN(x) && x > 0)) as (number | 'unassigned')[];
             if (parsed.length > 0) return parsed;
         }
+        const queryVtId = urlParams.get('vt_id');
+        if (queryVtId) {
+            if (queryVtId === 'unassigned') return ['unassigned'];
+            const num = Number(queryVtId);
+            if (!isNaN(num) && num > 0) return [num];
+        }
         const queryVt = urlParams.get('vt');
         if (queryVt) {
             if (queryVt === 'unassigned') return ['unassigned'];
             const num = Number(queryVt);
-            if (!isNaN(num) && num > 0) return [num];
+            if (!isNaN(num) && num > 0) {
+                const byId = visits.find((v) => Number(v.VT_ID) === num);
+                if (byId) return [Number(byId.VT_ID)];
+                const byNo = visits.find((v) => Number(v.VT_NO) === num);
+                if (byNo) return [Number(byNo.VT_ID)];
+                return [num];
+            }
         }
         try {
-            const saved = sessionStorage.getItem(`xray_selected_vts_${hn}`);
+            const saved = sessionStorage.getItem(`xray_selected_vt_ids_${hn}`) || sessionStorage.getItem(`xray_selected_vts_${hn}`);
             if (saved) {
                 const parsed = JSON.parse(saved);
                 if (Array.isArray(parsed) && parsed.length > 0) return parsed;
             }
         } catch (e) { }
-        if (defaultVtNo !== null && defaultVtNo !== undefined && Number(defaultVtNo) > 0) {
-            return [Number(defaultVtNo)];
+        if (defaultVtId !== null && defaultVtId !== undefined && Number(defaultVtId) > 0) {
+            return [Number(defaultVtId)];
+        }
+        if (visits.length > 0 && visits[0].VT_ID) {
+            return [Number(visits[0].VT_ID)];
         }
         return [];
     });
@@ -151,59 +166,75 @@ export default function UltrasoundImage({
     useEffect(() => {
         if (typeof window === 'undefined') return;
         const url = new URL(window.location.href);
-        if (selectedVtNos.length === 0) {
+        if (selectedVtIds.length === 0) {
+            url.searchParams.delete('vt_id');
+            url.searchParams.delete('vt_ids');
             url.searchParams.delete('vt');
             url.searchParams.delete('vts');
-        } else if (selectedVtNos.length === 1) {
-            url.searchParams.set('vt', String(selectedVtNos[0]));
+        } else if (selectedVtIds.length === 1) {
+            url.searchParams.set('vt_id', String(selectedVtIds[0]));
+            url.searchParams.delete('vt_ids');
             url.searchParams.delete('vts');
+            const singleVisit = visits.find((v) => Number(v.VT_ID) === Number(selectedVtIds[0]));
+            if (singleVisit) {
+                url.searchParams.set('vt', String(singleVisit.VT_NO));
+            } else {
+                url.searchParams.delete('vt');
+            }
         } else {
-            url.searchParams.set('vts', selectedVtNos.join(','));
+            url.searchParams.set('vt_ids', selectedVtIds.join(','));
+            url.searchParams.delete('vt_id');
             url.searchParams.delete('vt');
+            url.searchParams.delete('vts');
         }
         window.history.replaceState({}, '', url.toString());
         try {
-            if (selectedVtNos.length > 0) {
-                sessionStorage.setItem(`xray_selected_vts_${hn}`, JSON.stringify(selectedVtNos));
+            if (selectedVtIds.length > 0) {
+                sessionStorage.setItem(`xray_selected_vt_ids_${hn}`, JSON.stringify(selectedVtIds));
             } else {
-                sessionStorage.removeItem(`xray_selected_vts_${hn}`);
+                sessionStorage.removeItem(`xray_selected_vt_ids_${hn}`);
             }
         } catch (e) { }
-    }, [selectedVtNos, hn]);
+    }, [selectedVtIds, hn, visits]);
 
     // Toggle a single visit selection
-    const handleToggleVisit = (vtNo: number | 'unassigned') => {
-        setSelectedVtNos((prev) => {
-            if (prev.includes(vtNo)) {
-                return prev.filter((item) => item !== vtNo);
+    const handleToggleVisit = (vtId: number | 'unassigned') => {
+        setSelectedVtIds((prev) => {
+            if (prev.includes(vtId)) {
+                return prev.filter((item) => item !== vtId);
             } else {
-                return [...prev, vtNo];
+                return [...prev, vtId];
             }
         });
     };
 
     // Select ALL visits
     const handleSelectAllVisits = () => {
-        const allNos: (number | 'unassigned')[] = visits.map((v) => Number(v.VT_NO));
+        const allIds: (number | 'unassigned')[] = visits.map((v) => Number(v.VT_ID));
         if (unassignedXrayImages.length > 0) {
-            allNos.push('unassigned');
+            allIds.push('unassigned');
         }
-        if (selectedVtNos.length === allNos.length) {
-            setSelectedVtNos([]);
+        if (selectedVtIds.length === allIds.length) {
+            setSelectedVtIds([]);
         } else {
-            setSelectedVtNos(allNos);
+            setSelectedVtIds(allIds);
         }
     };
 
     // Select ONLY one visit
-    const handleSelectOnlyVisit = (vtNo: number | 'unassigned') => {
-        setSelectedVtNos([vtNo]);
+    const handleSelectOnlyVisit = (vtId: number | 'unassigned') => {
+        setSelectedVtIds([vtId]);
         const url = new URL(window.location.href);
-        if (vtNo === 'unassigned') {
+        if (vtId === 'unassigned') {
+            url.searchParams.delete('vt_id');
             url.searchParams.delete('vt');
         } else {
-            url.searchParams.set('vt', String(vtNo));
+            url.searchParams.set('vt_id', String(vtId));
+            const v = visits.find((item) => Number(item.VT_ID) === Number(vtId));
+            if (v) url.searchParams.set('vt', String(v.VT_NO));
         }
+        url.searchParams.delete('vt_ids');
+        url.searchParams.delete('vts');
         window.history.replaceState({}, '', url.toString());
     };
 
@@ -212,7 +243,9 @@ export default function UltrasoundImage({
             sessionStorage.removeItem(`xray_selected_imgs_${hn}`);
             sessionStorage.removeItem(`xray_selection_mode_${hn}`);
         } catch (e) { }
-        const firstVt = typeof selectedVtNos[0] === 'number' ? selectedVtNos[0] : (visits[0]?.VT_NO || '');
+        const firstVtId = selectedVtIds.find((x) => typeof x === 'number');
+        const matchedVisit = visits.find((v) => Number(v.VT_ID) === Number(firstVtId)) || visits[0];
+        const firstVt = matchedVisit?.VT_NO || '';
         router.visit(route('patient.show', {
             hn: patient?.op_hn || hn,
             vt: firstVt,
@@ -222,9 +255,9 @@ export default function UltrasoundImage({
 
     // Upload Modal State
     const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-    const [uploadTargetVtNo, setUploadTargetVtNo] = useState<number | ''>(() => {
-        const first = selectedVtNos.find((item) => typeof item === 'number') as number | undefined;
-        return first || defaultVtNo || (visits[0]?.VT_NO ?? '');
+    const [uploadTargetVtId, setUploadTargetVtId] = useState<number | ''>(() => {
+        const first = selectedVtIds.find((item) => typeof item === 'number') as number | undefined;
+        return first || defaultVtId || (visits[0]?.VT_ID ?? '');
     });
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [isDragging, setIsDragging] = useState(false);
@@ -259,15 +292,15 @@ export default function UltrasoundImage({
     };
 
     // Open upload modal pre-selected to a specific visit with optional initial dropped files
-    const handleOpenUploadForVisit = (vtNo?: number, filesToAdd?: File[]) => {
-        if (vtNo) {
-            setUploadTargetVtNo(vtNo);
+    const handleOpenUploadForVisit = (vtId?: number, filesToAdd?: File[]) => {
+        if (vtId) {
+            setUploadTargetVtId(vtId);
         } else {
-            const first = selectedVtNos.find((item) => typeof item === 'number') as number | undefined;
+            const first = selectedVtIds.find((item) => typeof item === 'number') as number | undefined;
             if (first) {
-                setUploadTargetVtNo(first);
+                setUploadTargetVtId(first);
             } else if (visits.length > 0) {
-                setUploadTargetVtNo(visits[0].VT_NO);
+                setUploadTargetVtId(visits[0].VT_ID);
             }
         }
         if (filesToAdd && filesToAdd.length > 0) {
@@ -280,7 +313,7 @@ export default function UltrasoundImage({
         setIsUploadModalOpen(true);
     };
 
-    const handleDropOnVisit = (e: React.DragEvent, vtNo: number) => {
+    const handleDropOnVisit = (e: React.DragEvent, vtId: number) => {
         e.preventDefault();
         e.stopPropagation();
         setIsDragging(false);
@@ -294,7 +327,7 @@ export default function UltrasoundImage({
         });
 
         if (validFiles.length > 0) {
-            handleOpenUploadForVisit(vtNo, validFiles);
+            handleOpenUploadForVisit(vtId, validFiles);
         }
     };
 
@@ -384,6 +417,7 @@ export default function UltrasoundImage({
         x: number;
         y: number;
         image: XrayImageItem | null;
+        visitVtId?: number;
         visitVtNo?: number;
     }>({
         isOpen: false,
@@ -392,7 +426,7 @@ export default function UltrasoundImage({
         image: null,
     });
 
-    const handleContextMenu = (e: React.MouseEvent, img: XrayImageItem, visitVtNo?: number) => {
+    const handleContextMenu = (e: React.MouseEvent, img: XrayImageItem, visitVtId?: number, visitVtNo?: number) => {
         e.preventDefault();
         e.stopPropagation();
 
@@ -406,6 +440,7 @@ export default function UltrasoundImage({
             x: Math.max(12, x),
             y: Math.max(12, y),
             image: img,
+            visitVtId,
             visitVtNo,
         });
     };
@@ -419,7 +454,7 @@ export default function UltrasoundImage({
     const touchStartPosRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
     const isLongPressTriggeredRef = useRef<boolean>(false);
 
-    const handleTouchStart = (e: React.TouchEvent, img: XrayImageItem, visitVtNo?: number) => {
+    const handleTouchStart = (e: React.TouchEvent, img: XrayImageItem, visitVtId?: number, visitVtNo?: number) => {
         if (e.touches.length !== 1) return;
         const touch = e.touches[0];
         touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -445,6 +480,7 @@ export default function UltrasoundImage({
                 x: Math.max(12, x),
                 y: Math.max(12, y),
                 image: img,
+                visitVtId,
                 visitVtNo,
             });
         }, 480); // 480ms standard iPad long-press duration
@@ -499,10 +535,10 @@ export default function UltrasoundImage({
 
     // Filtered selected visits objects
     const selectedVisitsList = useMemo(() => {
-        return visits.filter((v) => selectedVtNos.includes(Number(v.VT_NO)));
-    }, [visits, selectedVtNos]);
+        return visits.filter((v) => selectedVtIds.includes(Number(v.VT_ID)));
+    }, [visits, selectedVtIds]);
 
-    const isUnassignedSelected = selectedVtNos.includes('unassigned');
+    const isUnassignedSelected = selectedVtIds.includes('unassigned');
 
     // Get images for a specific visit
     const getImagesForVisit = (v: VisitItem) => {
@@ -512,7 +548,13 @@ export default function UltrasoundImage({
         return allImages.filter((img) => {
             const imgVtId = img.vt_id ? Number(img.vt_id) : null;
             const imgVtNo = img.vt_no ? Number(img.vt_no) : null;
-            return (imgVtId && vVtId && imgVtId === vVtId) || (imgVtNo && vVtNo && imgVtNo === vVtNo);
+            if (imgVtId && vVtId) {
+                return imgVtId === vVtId;
+            }
+            if (!imgVtId && imgVtNo && vVtNo) {
+                return imgVtNo === vVtNo;
+            }
+            return false;
         });
     };
 
@@ -595,21 +637,23 @@ export default function UltrasoundImage({
         setUploadError('');
 
         // Find target visit object
-        const targetVisit = visits.find((v) => Number(v.VT_NO) === Number(uploadTargetVtNo));
-        const targetVtId = targetVisit ? targetVisit.VT_ID : '';
+        const targetVisit = visits.find((v) => Number(v.VT_ID) === Number(uploadTargetVtId));
+        const targetVtId = targetVisit ? targetVisit.VT_ID : uploadTargetVtId;
+        const targetVtNo = targetVisit ? targetVisit.VT_NO : '';
 
         const formData = new FormData();
         selectedFiles.forEach((file) => {
             formData.append('images[]', file);
         });
         if (targetVtId) formData.append('vt_id', String(targetVtId));
-        if (uploadTargetVtNo) formData.append('vt_no', String(uploadTargetVtNo));
+        if (targetVtNo) formData.append('vt_no', String(targetVtNo));
 
         try {
             await axios.post(
                 route('patient.ultrasound.upload.store', {
                     hn: patient?.op_hn || hn,
-                    vt: uploadTargetVtNo || '',
+                    vt: targetVtNo || '',
+                    vt_id: targetVtId || '',
                 }),
                 formData,
                 {
@@ -627,8 +671,8 @@ export default function UltrasoundImage({
             setSelectedFiles([]);
             if (fileInputRef.current) fileInputRef.current.value = '';
             setIsUploadModalOpen(false);
-            if (uploadTargetVtNo && !selectedVtNos.includes(Number(uploadTargetVtNo))) {
-                setSelectedVtNos((prev) => [...prev, Number(uploadTargetVtNo)]);
+            if (uploadTargetVtId && !selectedVtIds.includes(Number(uploadTargetVtId))) {
+                setSelectedVtIds((prev) => [...prev, Number(uploadTargetVtId)]);
             }
 
             // Refresh data in background without triggering full-page navigation or skeleton
@@ -892,7 +936,7 @@ export default function UltrasoundImage({
     const roundKb = (bytes: number) => (bytes / 1024).toFixed(0) + ' KB';
 
     // Render individual image thumbnail card (Apple iOS Photos Grid style)
-    const renderImageCard = (img: XrayImageItem, visitVtNo?: number) => {
+    const renderImageCard = (img: XrayImageItem, visitVtId?: number, visitVtNo?: number) => {
         const isSelected = selectedImageFilenames.includes(img.filename);
         return (
             <div
@@ -909,11 +953,11 @@ export default function UltrasoundImage({
                         handleOpenLightbox(img);
                     }
                 }}
-                onTouchStart={(e) => handleTouchStart(e, img, visitVtNo)}
+                onTouchStart={(e) => handleTouchStart(e, img, visitVtId, visitVtNo)}
                 onTouchMove={handleTouchMove}
                 onTouchEnd={handleTouchEnd}
                 onTouchCancel={handleTouchEnd}
-                onContextMenu={(e) => handleContextMenu(e, img, visitVtNo)}
+                onContextMenu={(e) => handleContextMenu(e, img, visitVtId, visitVtNo)}
                 style={{ WebkitTouchCallout: 'none' }}
                 className={`group relative aspect-square rounded-none overflow-hidden border transition-all duration-200 cursor-pointer select-none bg-slate-950 shadow-xs hover:shadow-md touch-manipulation ${isSelected
                     ? 'border-[#00875A] ring-3 ring-[#00875A] scale-[0.98]'
@@ -1024,7 +1068,7 @@ export default function UltrasoundImage({
                                         รายการรอบตรวจ (Visit List)
                                     </CardTitle>
                                     <Badge variant="secondary" className="bg-[#E8F8F2] text-[#007A4D] border border-[#A7F3D0] font-bold text-xs px-2.5 py-0.5 rounded-full">
-                                        เลือก {selectedVtNos.length} / {visits.length}
+                                        เลือก {selectedVtIds.length} / {visits.length}
                                     </Badge>
                                 </div>
 
@@ -1037,7 +1081,7 @@ export default function UltrasoundImage({
                                     >
                                         <CheckCheck className="h-3.5 w-3.5" />
                                         <span>
-                                            {selectedVtNos.length === visits.length + (unassignedXrayImages.length > 0 ? 1 : 0)
+                                            {selectedVtIds.length === visits.length + (unassignedXrayImages.length > 0 ? 1 : 0)
                                                 ? 'ยกเลิกการเลือกทั้งหมด'
                                                 : 'เลือกทุก Visit (Select All)'}
                                         </span>
@@ -1052,13 +1096,13 @@ export default function UltrasoundImage({
                                     </div>
                                 ) : (
                                     visits.map((v) => {
-                                        const isSelected = selectedVtNos.includes(Number(v.VT_NO));
+                                        const isSelected = selectedVtIds.includes(Number(v.VT_ID));
                                         const count = Number(v.image_count || 0);
 
                                         return (
                                             <div
-                                                key={v.VT_ID || v.VT_NO}
-                                                onClick={() => handleToggleVisit(Number(v.VT_NO))}
+                                                key={v.VT_ID}
+                                                onClick={() => handleToggleVisit(Number(v.VT_ID))}
                                                 className={`group rounded-2xl transition-all duration-200 cursor-pointer p-4 sm:p-4.5 relative flex flex-col justify-between backdrop-blur-xl border ${isSelected
                                                     ? 'bg-[#E8F8F2]/75 border-[#00875A] ring-2 ring-[#00875A]/25 shadow-[0_8px_24px_rgba(0,135,90,0.12),inset_0_1.5px_2px_rgba(255,255,255,0.95)]'
                                                     : 'bg-white/80 border-white/90 border-t-white border-t-[1.5px] border-b-slate-200/60 shadow-[0_4px_16px_rgba(15,23,42,0.05),inset_0_1.5px_1.5px_rgba(255,255,255,1),inset_0_-1.5px_3px_rgba(15,23,42,0.03)] hover:bg-white/95 hover:border-slate-300/80 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08),inset_0_2px_3px_rgba(255,255,255,1)] hover:scale-[1.005]'
@@ -1072,7 +1116,7 @@ export default function UltrasoundImage({
                                                             <div
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    handleToggleVisit(Number(v.VT_NO));
+                                                                    handleToggleVisit(Number(v.VT_ID));
                                                                 }}
                                                                 className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all cursor-pointer ${isSelected
                                                                     ? 'bg-[#00875A] text-white shadow-[0_2px_8px_rgba(0,135,90,0.35)]'
@@ -1113,7 +1157,7 @@ export default function UltrasoundImage({
                                                             type="button"
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                handleOpenUploadForVisit(Number(v.VT_NO));
+                                                                handleOpenUploadForVisit(Number(v.VT_ID));
                                                             }}
                                                             className="h-7 px-3 liquid-glass-btn-primary active:scale-[0.98] text-white text-xs font-bold rounded-full transition-all text-center flex items-center justify-center gap-1 cursor-pointer shrink-0 shadow-xs"
                                                             title="อัปโหลดรูปภาพเข้า Visit นี้"
@@ -1181,7 +1225,7 @@ export default function UltrasoundImage({
                                     <div className="flex items-center gap-2.5 flex-wrap">
                                         <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                                             <Layers className="h-5 w-5 text-[#00875A]" />
-                                            <span>คลังรูปภาพแยกตามรอบตรวจ (เลือกดู {selectedVtNos.length} Visit • รวม {allVisibleImages.length} รูป)</span>
+                                            <span>คลังรูปภาพแยกตามรอบตรวจ (เลือกดู {selectedVtIds.length} Visit • รวม {allVisibleImages.length} รูป)</span>
                                         </CardTitle>
 
                                         {isSelectionMode && (
@@ -1236,6 +1280,7 @@ export default function UltrasoundImage({
                                                                                 filenames: selectedImageFilenames.join(','),
                                                                                 layout,
                                                                                 vt: selectedVisitsList[0]?.VT_NO || defaultVtNo || '',
+                                                                                vt_id: selectedVisitsList[0]?.VT_ID || defaultVtId || '',
                                                                             }),
                                                                             '_blank'
                                                                         )
@@ -1283,7 +1328,7 @@ export default function UltrasoundImage({
 
                             {/* Grouped Galleries Body */}
                             <CardContent className="p-4 sm:p-5 flex-1 min-h-0 overflow-y-auto space-y-6 bg-slate-50/40">
-                                {selectedVtNos.length === 0 ? (
+                                {selectedVtIds.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center text-center p-12 border-2 border-dashed border-slate-300 rounded-3xl min-h-[360px] bg-white/70">
                                         <div className="w-16 h-16 rounded-3xl bg-[#E8F8F2] border border-[#A7F3D0] flex items-center justify-center text-[#00875A] shadow-inner mb-3.5">
                                             <Filter className="h-8 w-8 text-[#00875A]" />
@@ -1311,10 +1356,10 @@ export default function UltrasoundImage({
 
                                             return (
                                                 <div
-                                                    key={v.VT_ID || v.VT_NO}
+                                                    key={v.VT_ID}
                                                     onDragOver={handleDragOver}
                                                     onDragLeave={handleDragLeave}
-                                                    onDrop={(e) => handleDropOnVisit(e, Number(v.VT_NO))}
+                                                    onDrop={(e) => handleDropOnVisit(e, Number(v.VT_ID))}
                                                     className="bg-white/90 border border-slate-200/90 rounded-2xl shadow-xs overflow-hidden transition-all duration-200 hover:shadow-md"
                                                 >
                                                     {/* Visit Section Header */}
@@ -1375,6 +1420,7 @@ export default function UltrasoundImage({
                                                                                             filenames: vImages.map((img) => img.filename).join(','),
                                                                                             layout,
                                                                                             vt: v.VT_NO,
+                                                                                            vt_id: v.VT_ID,
                                                                                         }),
                                                                                         '_blank'
                                                                                     )
@@ -1395,9 +1441,9 @@ export default function UltrasoundImage({
                                                             <div
                                                                 onDragOver={handleDragOver}
                                                                 onDragLeave={handleDragLeave}
-                                                                onDrop={(e) => handleDropOnVisit(e, Number(v.VT_NO))}
+                                                                onDrop={(e) => handleDropOnVisit(e, Number(v.VT_ID))}
                                                                 className="flex items-center justify-between p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-[#E8F8F2]/40 hover:border-[#00875A] transition-all cursor-pointer"
-                                                                onClick={() => handleOpenUploadForVisit(Number(v.VT_NO))}
+                                                                onClick={() => handleOpenUploadForVisit(Number(v.VT_ID))}
                                                             >
                                                                 <div className="flex items-center gap-3">
                                                                     <div className="w-10 h-10 rounded-xl bg-[#E8F8F2] text-[#00875A] flex items-center justify-center">
@@ -1415,7 +1461,7 @@ export default function UltrasoundImage({
                                                             </div>
                                                         ) : (
                                                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1 sm:gap-1.5">
-                                                                {vImages.map((img) => renderImageCard(img, Number(v.VT_NO)))}
+                                                                {vImages.map((img) => renderImageCard(img, Number(v.VT_ID), Number(v.VT_NO)))}
                                                             </div>
                                                         )}
                                                     </div>
@@ -1477,12 +1523,12 @@ export default function UltrasoundImage({
                                 <span className="text-[11px] text-slate-500 font-normal">ระบุ Visit ที่ต้องการบันทึกภาพ</span>
                             </label>
                             <select
-                                value={uploadTargetVtNo}
-                                onChange={(e) => setUploadTargetVtNo(e.target.value ? Number(e.target.value) : '')}
+                                value={uploadTargetVtId}
+                                onChange={(e) => setUploadTargetVtId(e.target.value ? Number(e.target.value) : '')}
                                 className="w-full h-10 px-3.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:border-[#00875A] focus:ring-1 focus:ring-[#00875A]/30 font-semibold text-slate-800"
                             >
                                 {visits.map((v) => (
-                                    <option key={v.VT_ID || v.VT_NO} value={v.VT_NO}>
+                                    <option key={v.VT_ID} value={v.VT_ID}>
                                         Visit #{v.VT_NO} - {v.formatted_date || v.pb_now1 || ''} {v.OP_SEND_DR_Name ? `(${v.OP_SEND_DR_Name})` : ''}
                                     </option>
                                 ))}
@@ -1863,6 +1909,7 @@ export default function UltrasoundImage({
                                 hn: patient?.op_hn || hn,
                                 filename: contextMenu.image.filename,
                                 vt: contextMenu.visitVtNo || contextMenu.image.vt_no || defaultVtNo || '',
+                                vt_id: contextMenu.visitVtId || contextMenu.image.vt_id || defaultVtId || '',
                             })}
                             target="_blank"
                             rel="noopener noreferrer"

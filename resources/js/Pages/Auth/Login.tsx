@@ -213,7 +213,7 @@ export default function Login({
 
                 {/* Footer copyright note */}
                 <div className="text-center text-xs text-slate-400 font-medium">
-                    <p>© 2026 OPD Referral & X-Ray Management System</p>
+                    <p>© 2026 OPD Referral Management System</p>
                     <p className="text-slate-400 text-[11px] mt-0.5">ระบบจัดการเวชระเบียนและผลการตรวจทางรังสีวิทยา</p>
                 </div>
             </div>

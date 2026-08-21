@@ -127,8 +127,8 @@ export default function NotificationBell() {
             const title = `🏥 มีผู้ป่วยส่งตัวมาใหม่: ${p.fullname}`;
             const notifOptions: NotificationOptions = {
                 body: `CN: ${p.op_hn} (Visit: ${p.VT_NO || '-'}) ${p.OP_CHIEF ? '• อาการ: ' + p.OP_CHIEF : ''}`,
-                icon: p.Image_PT || '/images/LOGO-04.jpg',
-                badge: '/images/LOGO-04.jpg',
+                icon: p.Image_PT || '/icons/icon-192x192.png',
+                badge: '/icons/icon-192x192.png',
                 tag: `patient-${key}`,
                 data: { url: targetUrl, hn: p.op_hn, vt: p.VT_NO || '' },
                 silent: false,
@@ -190,7 +190,7 @@ export default function NotificationBell() {
             if (perm === 'granted') {
                 const notif = new Notification('🏥 ระบบแจ้งเตือนผู้ป่วยส่งตัว OPD', {
                     body: `เปิดใช้งานการแจ้งเตือนบน ${osName} สำเร็จ! ระบบจะแจ้งเตือนเมื่อมีผู้ป่วยส่งตัวเข้ามาใหม่`,
-                    icon: '/images/LOGO-04.jpg',
+                    icon: '/icons/icon-192x192.png',
                     silent: false,
                 });
                 playChimeSound();

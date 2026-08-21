@@ -27,13 +27,19 @@ export default function Settings() {
     const isStandalone = typeof window !== 'undefined' && ((window.navigator as any).standalone === true || window.matchMedia('(display-mode: standalone)').matches);
     const osName = isIPad ? 'iPad' : (isMac ? 'macOS' : 'Windows');
 
-    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-    const [isInstalled, setIsInstalled] = useState<boolean>(isStandalone);
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(() => {
+        // Read globally captured prompt (may have fired before this page mounted)
+        return typeof window !== 'undefined' ? (window as any).__pwaInstallPrompt : null;
+    });
+    const [isInstalled, setIsInstalled] = useState<boolean>(() => {
+        if (isStandalone) return true;
+        return typeof window !== 'undefined' ? !!(window as any).__pwaInstalled : false;
+    });
 
     useEffect(() => {
-        const handleBeforeInstallPrompt = (e: Event) => {
-            e.preventDefault();
-            setDeferredPrompt(e);
+        // If a new prompt arrives while this page is mounted
+        const handlePromptCaptured = () => {
+            setDeferredPrompt((window as any).__pwaInstallPrompt);
         };
 
         const handleAppInstalled = () => {
@@ -41,10 +47,20 @@ export default function Settings() {
             setDeferredPrompt(null);
         };
 
+        // Also listen for the native events as fallback
+        const handleBeforeInstallPrompt = (e: Event) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+        };
+
+        window.addEventListener('pwa-prompt-captured', handlePromptCaptured);
+        window.addEventListener('pwa-installed', handleAppInstalled);
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         window.addEventListener('appinstalled', handleAppInstalled);
 
         return () => {
+            window.removeEventListener('pwa-prompt-captured', handlePromptCaptured);
+            window.removeEventListener('pwa-installed', handleAppInstalled);
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
             window.removeEventListener('appinstalled', handleAppInstalled);
         };
@@ -58,6 +74,7 @@ export default function Settings() {
             setIsInstalled(true);
         }
         setDeferredPrompt(null);
+        (window as any).__pwaInstallPrompt = null;
     };
 
     // Windows / System Notification state
@@ -126,7 +143,7 @@ export default function Settings() {
             if (perm === 'granted') {
                 new Notification(`🏥 ระบบแจ้งเตือนผู้ป่วยส่งตัว OPD (ทดสอบ)`, {
                     body: `เปิดใช้งานการแจ้งเตือนบน ${osName} สำเร็จ! ระบบจะแจ้งเตือนเมื่อมีผู้ป่วยส่งตัวใหม่`,
-                    icon: '/images/LOGO-04.jpg',
+                    icon: '/icons/icon-192x192.png',
                     silent: false,
                 });
                 playTestChime();
@@ -146,7 +163,7 @@ export default function Settings() {
             if (Notification.permission === 'granted') {
                 new Notification(`🏥 ระบบแจ้งเตือนผู้ป่วยส่งตัว OPD (ทดสอบ)`, {
                     body: `ระบบแจ้งเตือนบน ${osName} ทำงานปกติ! จะแจ้งเตือนเมื่อมีผู้ป่วยส่งตัวใหม่`,
-                    icon: '/images/LOGO-04.jpg',
+                    icon: '/icons/icon-192x192.png',
                     silent: false,
                 });
             } else if (Notification.permission !== 'denied') {
@@ -155,7 +172,7 @@ export default function Settings() {
                 if (perm === 'granted') {
                     new Notification(`🏥 ระบบแจ้งเตือนผู้ป่วยส่งตัว OPD (ทดสอบ)`, {
                         body: `เปิดใช้งานการแจ้งเตือนบน ${osName} สำเร็จ!`,
-                        icon: '/images/LOGO-04.jpg',
+                        icon: '/icons/icon-192x192.png',
                         silent: false,
                     });
                 }
@@ -230,13 +247,12 @@ export default function Settings() {
 
                     {/* Notification Setting Main Card */}
                     <div className="p-5 sm:p-6 rounded-2xl liquid-glass-card border border-slate-200/80 shadow-sm space-y-5">
-                        
+
                         {/* Switch Row */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
                             <div className="flex items-center gap-3.5">
-                                <div className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${
-                                    windowsNotifEnabled ? 'bg-[#E8F8F2] text-[#00875A]' : 'bg-slate-100 text-slate-400'
-                                }`}>
+                                <div className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 transition-colors ${windowsNotifEnabled ? 'bg-[#E8F8F2] text-[#00875A]' : 'bg-slate-100 text-slate-400'
+                                    }`}>
                                     {windowsNotifEnabled ? <Bell className="h-5.5 w-5.5" /> : <MonitorOff className="h-5.5 w-5.5" />}
                                 </div>
                                 <div>
@@ -265,17 +281,15 @@ export default function Settings() {
                                 <button
                                     type="button"
                                     onClick={handleToggleWindowsNotif}
-                                    className={`relative inline-flex h-8 w-15 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-300 ease-in-out focus:outline-none select-none active:scale-95 touch-manipulation ${
-                                        windowsNotifEnabled
+                                    className={`relative inline-flex h-8 w-15 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors duration-300 ease-in-out focus:outline-none select-none active:scale-95 touch-manipulation ${windowsNotifEnabled
                                             ? 'bg-[#00875A] shadow-[0_3px_12px_rgba(0,135,90,0.35)]'
                                             : 'bg-slate-300 shadow-inner'
-                                    }`}
+                                        }`}
                                     aria-label="Toggle Notification"
                                 >
                                     <span
-                                        className={`pointer-events-none inline-block h-7 w-7 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out ${
-                                            windowsNotifEnabled ? 'translate-x-7 shadow-[0_2px_6px_rgba(0,0,0,0.2)]' : 'translate-x-0'
-                                        }`}
+                                        className={`pointer-events-none inline-block h-7 w-7 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out ${windowsNotifEnabled ? 'translate-x-7 shadow-[0_2px_6px_rgba(0,0,0,0.2)]' : 'translate-x-0'
+                                            }`}
                                     />
                                 </button>
                             </div>

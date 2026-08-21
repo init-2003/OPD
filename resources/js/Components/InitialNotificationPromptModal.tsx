@@ -85,7 +85,7 @@ export default function InitialNotificationPromptModal() {
                 if (perm === 'granted') {
                     new Notification('🏥 ระบบแจ้งเตือนผู้ป่วยส่งตัว OPD', {
                         body: 'เปิดรับการแจ้งเตือนสำเร็จ! ระบบจะแจ้งเตือนเมื่อมีผู้ป่วยส่งตัวใหม่เข้ามาในระบบ',
-                        icon: '/images/LOGO-04.jpg',
+                        icon: '/icons/icon-192x192.png',
                         silent: false,
                     });
                     playChimeSound();

@@ -25,17 +25,42 @@ createInertiaApp({
     },
 });
 
-// Register PWA Service Worker
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker
-            .register('/sw.js')
-            .then((registration) => {
-                // Registration successful
-            })
-            .catch((error) => {
-                console.log('Service Worker registration failed:', error);
-            });
+// Register PWA Service Worker & capture install prompt globally
+if (typeof window !== 'undefined') {
+    // Capture beforeinstallprompt early so Settings page can use it later
+    (window as any).__pwaInstallPrompt = null;
+    (window as any).__pwaInstalled = false;
+
+    window.addEventListener('beforeinstallprompt', (e: Event) => {
+        e.preventDefault();
+        (window as any).__pwaInstallPrompt = e;
+        // Dispatch a custom event so any mounted component can react
+        window.dispatchEvent(new CustomEvent('pwa-prompt-captured'));
     });
+
+    window.addEventListener('appinstalled', () => {
+        (window as any).__pwaInstallPrompt = null;
+        (window as any).__pwaInstalled = true;
+        window.dispatchEvent(new CustomEvent('pwa-installed'));
+    });
+
+    if ('serviceWorker' in navigator) {
+        const registerSW = () => {
+            navigator.serviceWorker
+                .register('/sw.js')
+                .catch((error) => {
+                    // Silently ignore InvalidStateError (common in dev/HMR)
+                    if (error.name !== 'InvalidStateError') {
+                        console.log('Service Worker registration failed:', error);
+                    }
+                });
+        };
+
+        if (document.readyState === 'complete') {
+            registerSW();
+        } else {
+            window.addEventListener('load', registerSW);
+        }
+    }
 }
 

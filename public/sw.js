@@ -1,10 +1,14 @@
 // OPD System Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'opd-pwa-cache-v2';
+const CACHE_NAME = 'opd-pwa-cache-v3';
 const STATIC_ASSETS = [
-    '/favicon.png',
     '/favicon.ico',
+    '/favicon-32x32.png',
+    '/favicon-16x16.png',
+    '/apple-touch-icon.png',
     '/manifest.json',
-    '/images/LOGO-04.jpg',
+    '/icons/icon-192x192.png',
+    '/icons/icon-512x512.png',
+    '/images/LOGO-NON-BG.png',
 ];
 
 // Install Event - Pre-cache essential static assets
@@ -87,8 +91,8 @@ self.addEventListener('push', (event) => {
     const targetUrl = data.url || '/';
     const options = {
         body: data.body || 'มีรายการผู้ป่วยส่งตัวใหม่เข้ามาในระบบ',
-        icon: data.icon || '/images/LOGO-04.jpg',
-        badge: '/images/LOGO-04.jpg',
+        icon: data.icon || '/icons/icon-192x192.png',
+        badge: '/icons/icon-192x192.png',
         tag: data.tag || 'opd-patient-alert',
         data: { url: targetUrl },
         vibrate: [200, 100, 200],

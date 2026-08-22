@@ -15,6 +15,10 @@ return [
 
     'name' => env('APP_NAME', 'OPD Referral Management System'),
 
+    'version' => env('APP_VERSION', '1.0.0'),
+
+    'build' => env('APP_BUILD', 'local'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment

@@ -250,6 +250,13 @@ export default function Authenticated({
                                             </div>
                                             <ChevronRight className="h-4 w-4 text-rose-300 group-hover:text-rose-600 group-hover:translate-x-0.5 transition-all" />
                                         </DropdownMenuItem>
+                                        <DropdownMenuSeparator className="my-1 bg-slate-100" />
+                                        <div className="px-3 py-1.5 flex items-center justify-between text-[11px] text-slate-400 font-medium">
+                                            <span>เวอร์ชันระบบ</span>
+                                            <span className="font-bold text-[#007A4D] bg-[#E8F8F2] px-2 py-0.5 rounded-full border border-emerald-200/70 shadow-2xs font-mono">
+                                                v{usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'}{(usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || 'local') !== 'local' ? ` (Build #${usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD})` : ' (Dev)'}
+                                            </span>
+                                        </div>
                                     </DropdownMenuContent>
                                 </DropdownMenu>
                             </div>
@@ -306,6 +313,13 @@ export default function Authenticated({
                                 <LogOut className="h-4 w-4" />
                                 <span>Log Out (ออกจากระบบ)</span>
                             </button>
+                        </div>
+
+                        <div className="px-4 py-2.5 mt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+                            <span>เวอร์ชันระบบ</span>
+                            <span className="font-bold text-[#007A4D] bg-[#E8F8F2] px-2 py-0.5 rounded-full border border-emerald-200/70 shadow-2xs font-mono">
+                                v{usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'}{(usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || 'local') !== 'local' ? ` (Build #${usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD})` : ' (Dev)'}
+                            </span>
                         </div>
                     </div>
                 </div>

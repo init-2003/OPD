@@ -276,10 +276,16 @@ export default function Login({
                     </CardContent>
                 </Card>
 
-                {/* Footer copyright note */}
-                <div className="text-center text-xs text-slate-400 font-medium">
-                    <p>© 2026 OPD Referral Management System</p>
-                    <p className="text-slate-400 text-[11px] mt-0.5">ระบบจัดการเวชระเบียนและผลการตรวจทางรังสีวิทยา</p>
+                {/* Footer copyright note with version and build badge */}
+                <div className="text-center text-xs text-slate-400 font-medium space-y-1.5">
+                    <div className="flex items-center justify-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/80 text-[#007A4D] border border-emerald-200/70 shadow-2xs backdrop-blur-xs">
+                            v{pageProps?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} {(pageProps?.app_build || import.meta.env.VITE_APP_BUILD || 'local') !== 'local' ? `(Build #${pageProps?.app_build || import.meta.env.VITE_APP_BUILD})` : '(Dev)'}
+                        </span>
+                        <span>•</span>
+                        <p>© 2026 OPD Referral Management System</p>
+                    </div>
+                    <p className="text-slate-400 text-[11px]">ระบบจัดการเวชระเบียนและผลการตรวจทางรังสีวิทยา</p>
                 </div>
             </div>
 

@@ -1,0 +1,115 @@
+name: Build & Deploy on Windows
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  APP_VERSION: '1.0.0'
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy Windows (v${{ vars.APP_VERSION || '1.0.0' }} Build #${{ github.run_number }})
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, xml, ctype, iconv, intl, pdo, sqlite, pdo_sqlite, bcmath, gd, curl
+          coverage: none
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Configure Version & Environment in .env
+        shell: powershell
+        run: |
+          if (-not (Test-Path .env)) {
+            if (Test-Path .env.example) {
+              Copy-Item .env.example .env
+            } else {
+              New-Item -ItemType File -Path .env -Force
+            }
+          }
+          $lines = Get-Content .env
+          $updated = @()
+          $keys = @('APP_VERSION', 'APP_BUILD', 'VITE_APP_VERSION', 'VITE_APP_BUILD')
+          $found = @{}
+
+          foreach ($line in $lines) {
+            $matched = $false
+            foreach ($k in $keys) {
+              if ($line -match "^$k=") {
+                $val = if ($k -match 'VERSION') { '${{ env.APP_VERSION }}' } else { '${{ github.run_number }}' }
+                $updated += "$k=$val"
+                $found[$k] = $true
+                $matched = $true
+                break
+              }
+            }
+            if (-not $matched) {
+              $updated += $line
+            }
+          }
+
+          foreach ($k in $keys) {
+            if (-not $found[$k]) {
+              $val = if ($k -match 'VERSION') { '${{ env.APP_VERSION }}' } else { '${{ github.run_number }}' }
+              $updated += "$k=$val"
+            }
+          }
+
+          $updated | Set-Content .env
+
+      - name: Install PHP Dependencies
+        shell: powershell
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Prepare Application Key & SQLite Database
+        shell: powershell
+        run: |
+          php artisan key:generate --force
+          if (-not (Test-Path database/database.sqlite)) {
+            New-Item -ItemType File -Path database/database.sqlite -Force
+          }
+
+      - name: Run Pest & PHPUnit Tests
+        shell: powershell
+        run: php artisan test
+
+      - name: Install NPM Dependencies
+        shell: powershell
+        run: npm.cmd ci
+
+      - name: Build Frontend Assets
+        shell: powershell
+        env:
+          VITE_APP_VERSION: ${{ env.APP_VERSION }}
+          VITE_APP_BUILD: ${{ github.run_number }}
+        run: npm.cmd run build
+
+      - name: Optimize Laravel Cache
+        shell: powershell
+        run: |
+          php artisan optimize:clear
+
+      - name: Display Build Success Summary
+        shell: powershell
+        run: |
+          Write-Host "==========================================================" -ForegroundColor Green
+          Write-Host "  Successfully built on Windows!" -ForegroundColor Green
+          Write-Host "  Version : v${{ env.APP_VERSION }}" -ForegroundColor Cyan
+          Write-Host "  Build   : #${{ github.run_number }}" -ForegroundColor Cyan
+          Write-Host "  Commit  : ${{ github.sha }}" -ForegroundColor Yellow
+          Write-Host "==========================================================" -ForegroundColor Green

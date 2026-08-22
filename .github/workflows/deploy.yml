@@ -83,6 +83,7 @@ jobs:
           if (-not (Test-Path database/database.sqlite)) {
             New-Item -ItemType File -Path database/database.sqlite -Force
           }
+          php artisan migrate --force --no-interaction
 
       - name: Install NPM Dependencies & Build Frontend Assets
         shell: powershell
@@ -97,10 +98,12 @@ jobs:
         shell: powershell
         run: php artisan test
 
-      - name: Optimize Laravel Cache
+      - name: Clear and Optimize Laravel Cache
         shell: powershell
         run: |
-          php artisan optimize:clear
+          php artisan config:clear
+          php artisan route:clear
+          php artisan view:clear
 
       - name: Display Build Success Summary
         shell: powershell

@@ -49,6 +49,8 @@ class AuthenticatedSessionController extends Controller
     {
         $request->session()->forget(['dashboard_date', 'dashboard_search']);
 
+        $cookieName = Auth::guard('web')->getRecallerName();
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
@@ -56,6 +58,7 @@ class AuthenticatedSessionController extends Controller
         $request->session()->regenerateToken();
 
         return redirect()->route('login')
+            ->withCookie(\Illuminate\Support\Facades\Cookie::forget($cookieName))
             ->with('logout_success', true)
             ->with('status', 'ออกจากระบบสำเร็จ');
     }

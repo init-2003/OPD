@@ -48,8 +48,9 @@ class HandleInertiaRequests extends Middleware
                 'logout_success' => fn () => $request->session()->get('logout_success'),
                 'status' => fn () => $request->session()->get('status'),
             ],
-            'app_version' => config('app.version', '1.0.0'),
-            'app_build' => config('app.build', 'local'),
+            'app_version' => \App\Support\AppVersion::getVersion(),
+            'app_build' => \App\Support\AppVersion::getBuild(),
+            'app_commit' => \App\Support\AppVersion::getCommit(),
         ];
     }
 

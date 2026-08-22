@@ -175,13 +175,6 @@ export default function Login({
                     </CardHeader>
 
                     <CardContent className="p-6 sm:p-8 space-y-5">
-                        {status && (
-                            <div className="p-3.5 rounded-xl bg-[#E8F8F2] border border-[#A7F3D0] text-sm font-semibold text-[#007A4D] flex items-center gap-2">
-                                <ShieldCheck className="h-4 w-4 shrink-0 text-[#00875A]" />
-                                {status}
-                            </div>
-                        )}
-
                         <form onSubmit={submit} className="space-y-4">
                             {/* Username Field */}
                             <div className="space-y-1.5">
@@ -198,11 +191,10 @@ export default function Login({
                                         value={data.PB_user}
                                         autoComplete="username"
                                         onChange={(e) => setData('PB_user', e.target.value)}
-                                        className={`pl-10.5 pr-4 h-11 text-sm bg-slate-50/60 rounded-full font-medium transition-all ${
-                                            errors.PB_user
+                                        className={`pl-10.5 pr-4 h-11 text-sm bg-slate-50/60 rounded-full font-medium transition-all ${errors.PB_user
                                                 ? 'border-rose-300 focus:bg-white focus:border-rose-500 focus:ring-rose-500/20'
                                                 : 'border-slate-200 focus:bg-white focus:border-[#00875A] focus:ring-[#00875A]/20'
-                                        }`}
+                                            }`}
                                     />
                                 </div>
                             </div>
@@ -223,11 +215,10 @@ export default function Login({
                                         value={data.password}
                                         autoComplete="current-password"
                                         onChange={(e) => setData('password', e.target.value)}
-                                        className={`pl-10.5 pr-11 h-11 text-sm bg-slate-50/60 rounded-full font-medium transition-all ${
-                                            errors.password
+                                        className={`pl-10.5 pr-11 h-11 text-sm bg-slate-50/60 rounded-full font-medium transition-all ${errors.password
                                                 ? 'border-rose-300 focus:bg-white focus:border-rose-500 focus:ring-rose-500/20'
                                                 : 'border-slate-200 focus:bg-white focus:border-[#00875A] focus:ring-[#00875A]/20'
-                                        }`}
+                                            }`}
                                     />
                                     <button
                                         type="button"
@@ -277,15 +268,14 @@ export default function Login({
                 </Card>
 
                 {/* Footer copyright note with version and build badge */}
-                <div className="text-center text-xs text-slate-400 font-medium space-y-1.5">
-                    <div className="flex items-center justify-center gap-2 flex-wrap">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/80 text-[#007A4D] border border-emerald-200/70 shadow-2xs backdrop-blur-xs">
-                            v{pageProps?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} {(pageProps?.app_build || import.meta.env.VITE_APP_BUILD || 'local') !== 'local' ? `(Build #${pageProps?.app_build || import.meta.env.VITE_APP_BUILD})` : '(Dev)'}
-                        </span>
-                        <span>•</span>
-                        <p>© 2026 OPD Referral Management System</p>
-                    </div>
+                <div className="text-center text-xs text-slate-400 font-medium space-y-1">
+                    <p>© 2026 OPD Referral Management System</p>
                     <p className="text-slate-400 text-[11px]">ระบบจัดการเวชระเบียนและผลการตรวจทางรังสีวิทยา</p>
+                    <div className="pt-1 flex items-center justify-center">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/90 text-slate-900 border border-slate-300 shadow-2xs backdrop-blur-xs font-mono">
+                            Version {pageProps?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} Build {pageProps?.app_build || import.meta.env.VITE_APP_BUILD || '1'}
+                        </span>
+                    </div>
                 </div>
             </div>
 
@@ -298,9 +288,8 @@ export default function Login({
                         }`}
                 >
                     <div className="flex flex-col liquid-glass-toast text-slate-800 px-6 py-3.5 rounded-2xl sm:rounded-3xl shadow-2xl pointer-events-auto min-w-[260px] sm:min-w-[300px]">
-                        <span className={`text-[15px] sm:text-base font-extrabold tracking-tight flex items-center gap-1.5 ${
-                            toastType === 'success' ? 'text-emerald-700' : 'text-rose-600'
-                        }`}>
+                        <span className={`text-[15px] sm:text-base font-extrabold tracking-tight flex items-center gap-1.5 ${toastType === 'success' ? 'text-emerald-700' : 'text-rose-600'
+                            }`}>
                             {toastType === 'success' ? (
                                 <ShieldCheck className="h-4.5 w-4.5 shrink-0 text-[#00875A]" />
                             ) : (

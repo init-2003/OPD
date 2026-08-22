@@ -53,4 +53,17 @@ class CustomUserProvider extends EloquentUserProvider
     {
         // Do nothing to keep legacy Create_User table intact without truncation errors
     }
+
+    /**
+     * Retrieve a user by their unique identifier and "remember me" token.
+     * Overridden to return null since Create_User does not support persistent remember tokens.
+     *
+     * @param  mixed  $identifier
+     * @param  string  $token
+     * @return \Illuminate\Contracts\Auth\Authenticatable|null
+     */
+    public function retrieveByToken($identifier, $token)
+    {
+        return null;
+    }
 }

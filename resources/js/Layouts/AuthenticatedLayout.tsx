@@ -87,6 +87,13 @@ export default function Authenticated({
 
     const handleConfirmLogout = () => {
         setIsLoggingOut(true);
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('dashboard_selected_hn');
+            sessionStorage.removeItem('dashboard_selected_vt');
+            sessionStorage.removeItem('dashboard_search');
+            sessionStorage.removeItem('dashboard_status_filter');
+            sessionStorage.removeItem('dashboard_date');
+        }
         router.post(route('logout'), {}, {
             onFinish: () => {
                 setIsLoggingOut(false);
@@ -253,8 +260,8 @@ export default function Authenticated({
                                         <DropdownMenuSeparator className="my-1 bg-slate-100" />
                                         <div className="px-3 py-1.5 flex items-center justify-between text-[11px] text-slate-400 font-medium">
                                             <span>เวอร์ชันระบบ</span>
-                                            <span className="font-bold text-[#007A4D] bg-[#E8F8F2] px-2 py-0.5 rounded-full border border-emerald-200/70 shadow-2xs font-mono">
-                                                v{usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'}{(usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || 'local') !== 'local' ? ` (Build #${usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD})` : ' (Dev)'}
+                                            <span className="font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-300 shadow-2xs font-mono text-[11px]">
+                                                Version {usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} Build {usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || '1'}
                                             </span>
                                         </div>
                                     </DropdownMenuContent>
@@ -317,8 +324,8 @@ export default function Authenticated({
 
                         <div className="px-4 py-2.5 mt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
                             <span>เวอร์ชันระบบ</span>
-                            <span className="font-bold text-[#007A4D] bg-[#E8F8F2] px-2 py-0.5 rounded-full border border-emerald-200/70 shadow-2xs font-mono">
-                                v{usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'}{(usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || 'local') !== 'local' ? ` (Build #${usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD})` : ' (Dev)'}
+                            <span className="font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-300 shadow-2xs font-mono text-[11px]">
+                                Version {usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} Build {usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || '1'}
                             </span>
                         </div>
                     </div>

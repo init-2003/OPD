@@ -44,10 +44,27 @@ class AppVersion
             return static::$cachedBuild = (string)$envBuild;
         }
 
-        // Automatic Git Commit Count resolution (works automatically on git pull)
-        $gitCount = trim((string)@shell_exec('git rev-list --count HEAD 2>nul'));
-        if ($gitCount !== '' && is_numeric($gitCount)) {
-            return static::$cachedBuild = $gitCount;
+        // 1. Try git CLI commands (standard PATH and known Windows Git path)
+        $gitCommands = [
+            'git rev-list --count HEAD 2>nul',
+            '"C:\\Program Files\\Git\\cmd\\git.exe" rev-list --count HEAD 2>nul',
+            '"C:\\Program Files\\Git\\bin\\git.exe" rev-list --count HEAD 2>nul',
+        ];
+
+        foreach ($gitCommands as $cmd) {
+            $gitCount = trim((string)@shell_exec($cmd));
+            if ($gitCount !== '' && is_numeric($gitCount)) {
+                return static::$cachedBuild = $gitCount;
+            }
+        }
+
+        // 2. Pure PHP fallback: read directly from .git/logs/HEAD without needing git.exe
+        $reflogPath = base_path('.git/logs/HEAD');
+        if (file_exists($reflogPath)) {
+            $lines = file($reflogPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            if (!empty($lines)) {
+                return static::$cachedBuild = (string)count($lines);
+            }
         }
 
         return static::$cachedBuild = '1';
@@ -67,9 +84,30 @@ class AppVersion
             return static::$cachedCommit = (string)$meta['commit'];
         }
 
-        $gitHash = trim((string)@shell_exec('git rev-parse --short HEAD 2>nul'));
-        if ($gitHash !== '') {
-            return static::$cachedCommit = $gitHash;
+        $gitCommands = [
+            'git rev-parse --short HEAD 2>nul',
+            '"C:\\Program Files\\Git\\cmd\\git.exe" rev-parse --short HEAD 2>nul',
+        ];
+
+        foreach ($gitCommands as $cmd) {
+            $gitHash = trim((string)@shell_exec($cmd));
+            if ($gitHash !== '') {
+                return static::$cachedCommit = $gitHash;
+            }
+        }
+
+        // Pure PHP fallback: read hash from .git/HEAD
+        $headPath = base_path('.git/HEAD');
+        if (file_exists($headPath)) {
+            $headContent = trim((string)file_get_contents($headPath));
+            if (str_starts_with($headContent, 'ref: ')) {
+                $refFile = base_path('.git/' . trim(substr($headContent, 5)));
+                if (file_exists($refFile)) {
+                    return static::$cachedCommit = substr(trim((string)file_get_contents($refFile)), 0, 7);
+                }
+            } elseif (strlen($headContent) >= 7) {
+                return static::$cachedCommit = substr($headContent, 0, 7);
+            }
         }
 
         return static::$cachedCommit = null;

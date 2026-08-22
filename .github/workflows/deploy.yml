@@ -84,20 +84,18 @@ jobs:
             New-Item -ItemType File -Path database/database.sqlite -Force
           }
 
-      - name: Run Pest & PHPUnit Tests
-        shell: powershell
-        run: php artisan test
-
-      - name: Install NPM Dependencies
-        shell: powershell
-        run: npm.cmd ci
-
-      - name: Build Frontend Assets
+      - name: Install NPM Dependencies & Build Frontend Assets
         shell: powershell
         env:
           VITE_APP_VERSION: ${{ env.APP_VERSION }}
           VITE_APP_BUILD: ${{ github.run_number }}
-        run: npm.cmd run build
+        run: |
+          npm.cmd ci
+          npm.cmd run build
+
+      - name: Run Pest & PHPUnit Tests
+        shell: powershell
+        run: php artisan test
 
       - name: Optimize Laravel Cache
         shell: powershell

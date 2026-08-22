@@ -36,15 +36,30 @@ class LoginRequest extends FormRequest
     }
 
     /**
+     * Get the error messages for the defined validation rules.
+     *
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return [
+            'PB_user.required' => 'กรุณากรอกรหัสผู้ใช้งาน',
+            'PB_user.string' => 'รหัสผู้ใช้งานต้องเป็นข้อความ',
+            'password.required' => 'กรุณากรอกรหัสผ่าน',
+            'password.string' => 'รหัสผ่านต้องเป็นข้อความ',
+        ];
+    }
+
+    /**
      * Check whether the user is allowed to access the system.
-     * Only doctors (EMP_STS = 'D') or Administrators (Sts = 'Administrator') may log in.
+     * Only users with Sts = 'Administrator' and Degree = 4 may log in.
      */
     private function hasAccess(?User $user): bool
     {
         if (!$user) {
             return false;
         }
-        return $user->EMP_STS === 'D' || $user->Sts === 'Administrator';
+        return $user->Sts === 'Administrator' && (int)$user->Degree === 4;
     }
 
     /**
@@ -57,33 +72,30 @@ class LoginRequest extends FormRequest
         $this->ensureIsNotRateLimited();
 
         $credentials = [
-            'PB_user' => $this->string('PB_user'),
-            'password' => $this->string('password'),
+            'PB_user' => (string) $this->string('PB_user'),
+            'password' => (string) $this->string('password'),
         ];
 
-        $allowed = Auth::attempt($credentials, false, function ($user) {
-            return $this->hasAccess($user);
-        });
+        $provider = Auth::guard('web')->getProvider();
+        $user = $provider->retrieveByCredentials($credentials);
 
-        if (! $allowed) {
+        if (! $user || ! $provider->validateCredentials($user, $credentials)) {
             RateLimiter::hit($this->throttleKey());
-
-            // แยกกรณี: รหัสผ่านถูกต้องแต่บัญชีไม่มีสิทธิ์เข้าใช้งาน (เช่น พนักงาน)
-            $user = User::where('PB_user', $this->string('PB_user'))->first();
-            if ($user && ! $this->hasAccess($user)) {
-                $passwordOk = Auth::guard('web')->getProvider()->validateCredentials($user, ['password' => (string) $this->string('password')]);
-                if ($passwordOk) {
-                    throw ValidationException::withMessages([
-                        'PB_user' => 'บัญชีนี้ไม่มีสิทธิ์เข้าใช้งานระบบ (เฉพาะแพทย์และผู้ดูแลระบบ)',
-                    ]);
-                }
-            }
 
             throw ValidationException::withMessages([
                 'PB_user' => 'รหัสผู้ใช้งานหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบและลองใหม่อีกครั้ง',
             ]);
         }
 
+        if (! $this->hasAccess($user)) {
+            RateLimiter::hit($this->throttleKey());
+
+            throw ValidationException::withMessages([
+                'PB_user' => 'บัญชีผู้ใช้นี้ไม่มีสิทธิ์เข้าสู่ระบบ (เฉพาะแพทย์เท่านั้น)',
+            ]);
+        }
+
+        Auth::login($user, $this->boolean('remember'));
         RateLimiter::clear($this->throttleKey());
     }
 
@@ -103,10 +115,7 @@ class LoginRequest extends FormRequest
         $seconds = RateLimiter::availableIn($this->throttleKey());
 
         throw ValidationException::withMessages([
-            'PB_user' => trans('auth.throttle', [
-                'seconds' => $seconds,
-                'minutes' => ceil($seconds / 60),
-            ]),
+            'PB_user' => "คุณพยายามเข้าสู่ระบบบ่อยเกินไป กรุณาลองใหม่อีกครั้งในอีก {$seconds} วินาที",
         ]);
     }
 

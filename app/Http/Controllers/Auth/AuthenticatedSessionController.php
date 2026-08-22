@@ -20,6 +20,7 @@ class AuthenticatedSessionController extends Controller
     {
         return Inertia::render('Auth/Login', [
             'status' => session('status'),
+            'logout_success' => session('logout_success'),
         ]);
     }
 
@@ -35,8 +36,11 @@ class AuthenticatedSessionController extends Controller
 
         $today = now()->timezone('Asia/Bangkok')->format('Y-m-d');
 
-        return redirect()->route('dashboard', ['date' => $today]);
+        return redirect()->route('dashboard', ['date' => $today])
+            ->with('login_success', true)
+            ->with('success', 'เข้าสู่ระบบสำเร็จ');
     }
+
 
     /**
      * Destroy an authenticated session.
@@ -51,6 +55,10 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerateToken();
 
-        return redirect('/');
+        return redirect()->route('login')
+            ->with('logout_success', true)
+            ->with('status', 'ออกจากระบบสำเร็จ');
     }
 }
+
+

@@ -130,3 +130,19 @@ export function formatPatientAge(patient?: any): string {
     return calculateAgeWithMonths(patient.OP_BIRTH || patient.op_birth, patient.op_age || patient.OP_AGE);
 }
 
+/**
+ * Returns formatted Thai sex string ('ชาย' for M/1, 'หญิง' for F/2).
+ */
+export function formatPatientSex(sex?: string | null): string {
+    if (!sex) return '-';
+    const s = String(sex).trim();
+    if (s === 'M' || s === 'm' || s === '1' || s === 'ชาย' || s.toLowerCase() === 'male') {
+        return 'ชาย';
+    }
+    if (s === 'F' || s === 'f' || s === '2' || s === 'หญิง' || s.toLowerCase() === 'female') {
+        return 'หญิง';
+    }
+    return s || '-';
+}
+
+

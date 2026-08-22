@@ -75,7 +75,8 @@ import {
     Loader2,
     MoreHorizontal,
 } from 'lucide-react';
-import { formatDateGregorian, formatVitalValue, cleanDecimals, formatPatientAge } from '@/lib/utils';
+import { formatDateGregorian, formatVitalValue, cleanDecimals, formatPatientAge, formatPatientSex } from '@/lib/utils';
+
 import PatientVitalsModal from '@/Components/PatientVitalsModal';
 
 const isEmptyPage = (html: string) => {
@@ -84,10 +85,17 @@ const isEmptyPage = (html: string) => {
     return !(el.textContent || '').trim();
 };
 
+interface DoctorOption {
+    id: string;
+    name: string;
+    is_doctor?: boolean;
+}
+
 interface UltrasoundResultProps {
     patient: PatientVisit | null;
     hn: string;
     dbPresets?: PresetItem[];
+    doctors?: DoctorOption[];
 }
 
 interface PresetItem {
@@ -172,6 +180,7 @@ interface PageEditorProps {
     enterSignalRef: React.MutableRefObject<boolean>;
     onFocused?: () => void;
     editable?: boolean;
+    onCursorMove?: (editor: Editor) => void;
 }
 
 declare module '@tiptap/core' {
@@ -258,10 +267,11 @@ const PAGE_EXTENSIONS = [
 ];
 
 // One rich-text "paper" page. Content stays in sync with `html` from the
-// parent (which reflows/splits pages) and reports local edits upward.
-function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal, focusNonce, focusMode, pageHeight, onBackspaceAtStart, onEnterAtEnd, selectAllActiveRef, onSelectAll, onGlobalEdit, onCopyAll, onClearSelectAll, enterSignalRef, onFocused, editable = true }: PageEditorProps) {
+function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal, focusNonce, focusMode, pageHeight, onBackspaceAtStart, onEnterAtEnd, selectAllActiveRef, onSelectAll, onGlobalEdit, onCopyAll, onClearSelectAll, enterSignalRef, onFocused, editable = true, onCursorMove }: PageEditorProps) {
     const lastEmitted = useRef(html);
     const edRef = useRef<Editor | null>(null);
+    const onCursorMoveRef = useRef(onCursorMove);
+    onCursorMoveRef.current = onCursorMove;
     // Tiptap creates the Editor once and keeps the keydown closure from that
     // first render; route through refs so the handler always uses the LATEST
     // parent logic (also survives Vite HMR without a full page reload).
@@ -370,6 +380,9 @@ function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal,
             const h = sanitizeHtml(editor.getHTML());
             lastEmitted.current = h;
             onHtml(h);
+            if (editable && editor.view?.hasFocus()) {
+                onCursorMoveRef.current?.(editor);
+            }
         },
         onFocus: () => {
             if (editor?.view?.dom) {
@@ -378,13 +391,14 @@ function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal,
             }
             onFocusChange();
         },
-        onSelectionUpdate: () => {
+        onSelectionUpdate: ({ editor }) => {
             if (editor?.view?.dom) {
                 editor.view.dom.scrollTop = 0;
                 editor.view.dom.scrollLeft = 0;
             }
-            if (editor?.view?.hasFocus()) {
+            if (editable && editor?.view?.hasFocus()) {
                 onFocusChange();
+                onCursorMoveRef.current?.(editor);
             }
         },
     });
@@ -520,7 +534,63 @@ function PageEditor({ index, html, onHtml, onFocusChange, register, focusSignal,
     );
 }
 
-export default function UltrasoundResult({ patient, hn, dbPresets = [] }: UltrasoundResultProps) {
+export default function UltrasoundResult({ patient, hn, dbPresets = [], doctors = [] }: UltrasoundResultProps) {
+
+    const [refDoc, setRefDoc] = useState<string>(patient?.OP_Ref_Doc || '');
+    const [isRefDocModalOpen, setIsRefDocModalOpen] = useState(false);
+    const [refDocInput, setRefDocInput] = useState<string>(patient?.OP_Ref_Doc || '');
+    const [isSavingRefDoc, setIsSavingRefDoc] = useState(false);
+    const refDocInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        setRefDoc(patient?.OP_Ref_Doc || '');
+    }, [patient?.OP_Ref_Doc]);
+
+    useEffect(() => {
+        if (isRefDocModalOpen) {
+            setRefDocInput(refDoc || patient?.OP_Ref_Doc || '');
+            const timer = setTimeout(() => {
+                if (refDocInputRef.current) {
+                    refDocInputRef.current.focus();
+                    const len = refDocInputRef.current.value.length;
+                    refDocInputRef.current.setSelectionRange(len, len);
+                }
+            }, 80);
+            return () => clearTimeout(timer);
+        }
+    }, [isRefDocModalOpen, refDoc, patient]);
+
+    const handleSaveRefDoc = async (selectedName?: string) => {
+        const finalName = (selectedName !== undefined ? selectedName : refDocInput).trim();
+        setIsSavingRefDoc(true);
+        try {
+            const payloadResult = JSON.stringify(pages);
+            await axios.post(route('patient.ultrasound.update', { hn }), {
+                xray_result: payloadResult,
+                ref_doc: finalName,
+                vt_no: patient?.VT_NO || '',
+            }, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                },
+            });
+
+            setRefDoc(finalName);
+            if (patient) {
+                patient.OP_Ref_Doc = finalName;
+                patient.OP_Xray_Result = payloadResult;
+                patient.OP_Ultrasound_Result = payloadResult;
+            }
+            setSavedBaseline(serializeForBaseline(pages));
+            setIsRefDocModalOpen(false);
+        } catch (error) {
+            console.error('Error saving ref doc:', error);
+            alert('เกิดข้อผิดพลาดในการบันทึกแพทย์ผู้ส่งตรวจ กรุณาลองใหม่อีกครั้ง');
+        } finally {
+            setIsSavingRefDoc(false);
+        }
+    };
 
     const fromParam = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('from') || '' : '';
     const draftKey = `xray_draft_${hn}_${patient?.VT_NO || 'default'}`;
@@ -575,13 +645,45 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         return JSON.stringify(final);
     };
 
+    const editingKey = `ultrasound_is_editing_${hn}_${patient?.VT_NO || 'default'}`;
+
+    const rawDbResult = patient?.OP_Ultrasound_Result || patient?.OP_Xray_Result || '';
+    const hasDbData = Boolean(rawDbResult && splitIntoSavedPages(rawDbResult).some((p) => !isEmptyPage(p)));
+
+    const [isEditing, setIsEditing] = useState<boolean>(() => {
+        // If there is NO saved data in database, start immediately in editing mode
+        if (!hasDbData) return true;
+
+        // If there is saved data in database, require clicking "แก้ไข" button unless already active in session
+        try {
+            const savedState = sessionStorage.getItem(editingKey);
+            if (savedState !== null) {
+                return savedState === 'true';
+            }
+        } catch (e) { }
+
+        return false;
+    });
+
+    const handleSetIsEditing = (val: boolean) => {
+        setIsEditing(val);
+        try {
+            if (val) {
+                sessionStorage.setItem(editingKey, 'true');
+            } else {
+                sessionStorage.removeItem(editingKey);
+            }
+        } catch (e) { }
+    };
+
     const [savedBaseline, setSavedBaseline] = useState<string>(() =>
         serializeForBaseline(splitIntoSavedPages(patient?.OP_Ultrasound_Result || patient?.OP_Xray_Result || ''))
     );
     const [pendingNav, setPendingNav] = useState<(() => void) | null>(null);
     const isDirty = useMemo(() => {
+        if (!isEditing) return false;
         return serializeForBaseline(pages) !== savedBaseline;
-    }, [pages, savedBaseline]);
+    }, [pages, savedBaseline, isEditing]);
 
     const [linesPerPage, setLinesPerPage] = useState(DEFAULT_CAP_LINES);
     const EDITOR_HEIGHT = Math.round(LINE_H * linesPerPage) + 16;
@@ -804,8 +906,9 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                 }
             }
 
-            // Word-style continuous flow: Pull up from subsequent page ONLY if this page has room (< linesPerPage)
-            if (pi + 1 < pagesCopy.length && pagesCopy[pi + 1] && !pagesCopy[pi + 1].includes('[PAGE BREAK]')) {
+            // Word-style continuous flow: If NO [PAGE BREAK], pull up from subsequent page if this page has room (< linesPerPage)
+            const hasHardBreak = pageHtml.includes('[PAGE BREAK]');
+            if (!hasHardBreak && pi + 1 < pagesCopy.length && pagesCopy[pi + 1] && !pagesCopy[pi + 1].includes('[PAGE BREAK]')) {
                 let curLines = countHtmlLines(pageHtml, m);
                 if (curLines < linesPerPage) {
                     const tmpNext = document.createElement('div');
@@ -842,6 +945,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                 }
             }
 
+            // Only split and cascade if this page overflows linesPerPage (23 lines)
             const totalPageLines = countHtmlLines(pageHtml, m);
             if (totalPageLines <= linesPerPage) {
                 out[pi] = pageHtml.trim() === '' ? '<p></p>' : pageHtml;
@@ -1056,7 +1160,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
 
     const { setData, post, processing, data } = useForm({
         xray_result: JSON.stringify(pages),
-        ref_doc: patient?.OP_SEND_DR_Name || '',
+        ref_doc: patient?.OP_Ref_Doc || '',
         vt_no: patient?.VT_NO || '',
     });
 
@@ -1066,6 +1170,34 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
     // Merges the first block of the current page with the last block of the previous page
     const [pendingCursor, setPendingCursor] = useState<{ ts: number; targetPage: number } | null>(null);
     const appliedCursorRef = useRef<number | null>(null);
+
+
+    const scrollCursorIntoView = useCallback((ed?: Editor | null) => {
+        if (!isEditing) return;
+        if (!ed?.view || ed.isDestroyed) return;
+        try {
+            const view = ed.view;
+            if (!view.dom || !view.hasFocus()) return;
+            const { selection } = view.state;
+            const coords = view.coordsAtPos(selection.from);
+            if (!coords) return;
+
+            const container = containerRef.current;
+            if (!container) return;
+
+            const containerRect = container.getBoundingClientRect();
+            const topMargin = 70; // margin below floating top toolbar
+            const bottomMargin = 90; // margin above bottom screen edge
+
+            if (coords.bottom > containerRect.bottom - bottomMargin) {
+                const delta = coords.bottom - (containerRect.bottom - bottomMargin);
+                container.scrollBy({ top: delta, behavior: 'smooth' });
+            } else if (coords.top < containerRect.top + topMargin) {
+                const delta = coords.top - (containerRect.top + topMargin);
+                container.scrollBy({ top: delta, behavior: 'smooth' });
+            }
+        } catch (e) { }
+    }, [isEditing]);
 
     const findAndApplyPendingCursor = useCallback(() => {
         if (!pendingCursor) return false;
@@ -1096,11 +1228,14 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
 
                 setActivePage(j);
                 setPendingCursor(null);
+                setTimeout(() => {
+                    scrollCursorIntoView(ed2);
+                }, 30);
                 return true;
             }
         }
         return false;
-    }, [pendingCursor, pages]);
+    }, [pendingCursor, pages, scrollCursorIntoView]);
 
     useEffect(() => {
         if (!pendingCursor) return;
@@ -1243,6 +1378,32 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                     firstNext.remove();
                 }
 
+                // FLOW ALL remaining blocks from tmpNext to tmpPrev as long as tmpPrev can fit them (<= linesPerPage)
+                let curPrevLines = countHtmlLines(tmpPrev.innerHTML, m);
+                while (tmpNext.firstElementChild) {
+                    const nextBlock = tmpNext.firstElementChild as HTMLElement;
+                    const nextBlockLines = countBlockLines(nextBlock, m);
+                    if (curPrevLines + nextBlockLines <= linesPerPage) {
+                        tmpPrev.appendChild(nextBlock);
+                        curPrevLines += nextBlockLines;
+                    } else {
+                        const available = Math.max(0, linesPerPage - curPrevLines);
+                        if (available > 0) {
+                            const parts = splitBlockToFit(m, tmpPrev.innerHTML, nextBlock.outerHTML, available);
+                            if (parts.length > 1 && parts[0] && parts[1]) {
+                                const part0Div = document.createElement('div');
+                                part0Div.innerHTML = parts[0];
+                                while (part0Div.firstElementChild) {
+                                    tmpPrev.appendChild(part0Div.firstElementChild);
+                                }
+                                curPrevLines += countHtmlLines(parts[0], m);
+                                nextBlock.outerHTML = parts[1];
+                            }
+                        }
+                        break;
+                    }
+                }
+
                 const newPrevHtml = tmpPrev.innerHTML;
                 const newNextHtml = tmpNext.innerHTML;
 
@@ -1266,6 +1427,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                 }
                 pagesRef.current = next;
                 setPages(next);
+                setActivePage(i - 1);
                 setTimeout(() => {
                     scrollToPage(i - 1);
                 }, 50);
@@ -1362,7 +1524,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         const serialized = hasContent ? JSON.stringify(finalPages) : '';
         setData({
             xray_result: serialized,
-            ref_doc: patient?.OP_SEND_DR_Name || '',
+            ref_doc: refDoc || patient?.OP_Ref_Doc || '',
             vt_no: patient?.VT_NO || '',
         });
         try {
@@ -1395,12 +1557,17 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
     const [isVitalsModalOpen, setIsVitalsModalOpen] = useState(false);
     const [toastVisible, setToastVisible] = useState(false);
     const [toastActive, setToastActive] = useState(false);
+    const [toastMessage, setToastMessage] = useState<{ title: string; desc: string }>({
+        title: 'บันทึกสำเร็จ',
+        desc: 'บันทึกผลการตรวจเรียบร้อยแล้ว',
+    });
     const toastTimerRef = useRef<{ hide?: NodeJS.Timeout; unmount?: NodeJS.Timeout }>({});
 
-    const triggerSaveToast = () => {
+    const triggerSaveToast = (title = 'บันทึกสำเร็จ', desc = 'บันทึกผลการตรวจเรียบร้อยแล้ว') => {
         if (toastTimerRef.current.hide) clearTimeout(toastTimerRef.current.hide);
         if (toastTimerRef.current.unmount) clearTimeout(toastTimerRef.current.unmount);
 
+        setToastMessage({ title, desc });
         setToastVisible(true);
         setTimeout(() => {
             setToastActive(true);
@@ -1414,36 +1581,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         }, 3200);
     };
 
-    const editingKey = `ultrasound_is_editing_${hn}_${patient?.VT_NO || 'default'}`;
 
-    const rawDbResult = patient?.OP_Ultrasound_Result || patient?.OP_Xray_Result || '';
-    const hasDbData = Boolean(rawDbResult && splitIntoSavedPages(rawDbResult).some((p) => !isEmptyPage(p)));
-
-    const [isEditing, setIsEditing] = useState<boolean>(() => {
-        // If there is NO saved data in database, start immediately in editing mode
-        if (!hasDbData) return true;
-
-        // If there is saved data in database, require clicking "แก้ไข" button unless already active in session
-        try {
-            const savedState = sessionStorage.getItem(editingKey);
-            if (savedState !== null) {
-                return savedState === 'true';
-            }
-        } catch (e) { }
-
-        return false;
-    });
-
-    const handleSetIsEditing = (val: boolean) => {
-        setIsEditing(val);
-        try {
-            if (val) {
-                sessionStorage.setItem(editingKey, 'true');
-            } else {
-                sessionStorage.removeItem(editingKey);
-            }
-        } catch (e) { }
-    };
 
     // When entering the page with no existing data, auto-focus cursor ready for typing immediately
     useEffect(() => {
@@ -1473,6 +1611,20 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
     const [isAddPresetOpen, setIsAddPresetOpen] = useState(false);
     const [newPresetLabel, setNewPresetLabel] = useState('');
     const [newPresetText, setNewPresetText] = useState('');
+    const presetLabelInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isAddPresetOpen) {
+            const timer = setTimeout(() => {
+                if (presetLabelInputRef.current) {
+                    presetLabelInputRef.current.focus();
+                    const len = presetLabelInputRef.current.value.length;
+                    presetLabelInputRef.current.setSelectionRange(len, len);
+                }
+            }, 80);
+            return () => clearTimeout(timer);
+        }
+    }, [isAddPresetOpen]);
     const hasAllergy = patient ? ((patient.STS && patient.STS.toUpperCase() === 'Y') || Boolean(patient.OP_ALLERGIC)) : false;
 
     // iPad & Tablet Responsive States
@@ -1505,23 +1657,6 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         if (containerRef.current) {
             containerRef.current.scrollTop = 0;
         }
-    }, []);
-
-    useEffect(() => {
-        const resetScroll = () => {
-            if (containerRef.current) {
-                containerRef.current.scrollTop = 0;
-            }
-        };
-        resetScroll();
-        const t1 = setTimeout(resetScroll, 50);
-        const t2 = setTimeout(resetScroll, 150);
-        const t3 = setTimeout(resetScroll, 300);
-        return () => {
-            clearTimeout(t1);
-            clearTimeout(t2);
-            clearTimeout(t3);
-        };
     }, []);
 
     useEffect(() => {
@@ -1714,7 +1849,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                     setNewPresetLabel('');
                     setNewPresetText('');
                     setIsAddPresetOpen(false);
-                    triggerSaveToast();
+                    triggerSaveToast('แก้ไข Preset สำเร็จ', 'บันทึกการแก้ไข Preset เรียบร้อยแล้ว');
                 }
             } else {
                 // Create new preset
@@ -1729,7 +1864,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                     setNewPresetLabel('');
                     setNewPresetText('');
                     setIsAddPresetOpen(false);
-                    triggerSaveToast();
+                    triggerSaveToast('เพิ่ม Preset สำเร็จ', 'บันทึกข้อมูล Preset เรียบร้อยแล้ว');
                 }
             }
         } catch (err: any) {
@@ -1744,11 +1879,12 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         if (e) e.stopPropagation();
         handleClosePresetContextMenu();
 
-        if (!confirm('คุณต้องการลบ Preset นี้ออกจากฐานข้อมูลหรือไม่?')) return;
+        if (!confirm('คุณต้องการลบ Preset นี้หรือไม่?')) return;
 
         try {
             await axios.delete(route('presets.destroy', { id }));
             setPresetsList((prev) => prev.filter((p) => p.id !== id));
+            triggerSaveToast('ลบ Preset สำเร็จ', 'ลบ Preset เรียบร้อยแล้ว');
         } catch (err: any) {
             console.error('Error deleting preset:', err);
             alert('เกิดข้อผิดพลาดในการลบ Preset: ' + (err.response?.data?.message || err.message));
@@ -1788,7 +1924,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         try {
             await axios.post(route('patient.ultrasound.update', { hn }), {
                 xray_result: payloadResult,
-                ref_doc: patient?.OP_SEND_DR_Name || '',
+                ref_doc: refDoc || patient?.OP_Ref_Doc || '',
                 vt_no: patient?.VT_NO || '',
             }, {
                 headers: {
@@ -1840,7 +1976,8 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         if (!isEditing) {
             handleSetIsEditing(true);
         }
-        const ed = activeEditor() || editorsRef.current[0];
+        const targetPage = activePage >= 0 && activePage < pages.length ? activePage : 0;
+        const ed = editorsRef.current[targetPage] || activeEditor() || editorsRef.current[0];
         if (!ed) return;
         const html = sanitizeHtml(toParagraphHtml(text.replace(/\r\n/g, '\n').trim()));
         ed.chain().focus().insertContent(html).run();
@@ -1854,6 +1991,22 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         lastFlushKeyRef.current = '';
         const targetIndex = activePage >= 0 && activePage < pages.length ? activePage + 1 : pages.length;
         const newPages = [...pages];
+        const prevIndex = targetIndex - 1;
+        if (prevIndex >= 0 && prevIndex < newPages.length) {
+            let prevHtml = newPages[prevIndex] || '';
+            if (!prevHtml.includes('[PAGE BREAK]')) {
+                if (isEmptyPage(prevHtml)) {
+                    prevHtml = '<p>[PAGE BREAK]</p>';
+                } else {
+                    prevHtml = prevHtml.replace(/<p[^>]*>\s*<\/p>\s*$/i, '') + '<p>[PAGE BREAK]</p>';
+                }
+                newPages[prevIndex] = prevHtml;
+                const prevEd = editorsRef.current[prevIndex];
+                if (prevEd && !prevEd.isDestroyed) {
+                    prevEd.commands.setContent(prevHtml, { emitUpdate: false });
+                }
+            }
+        }
         newPages.splice(targetIndex, 0, '<p></p>');
         pagesRef.current = newPages;
         setPages(newPages);
@@ -1894,8 +2047,8 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
         <Card className={`overflow-hidden rounded-2xl h-full flex flex-col ${isModal ? 'border-none shadow-none' : 'border-slate-300/60 shadow-sm'}`}>
             <CardHeader className="p-4 shrink-0 border-b border-slate-100 flex flex-row items-center justify-between">
                 <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-                    <FileText className="h-5 w-5 text-[#00875A]" />
-                    ข้อมูลผู้ป่วย (Patient Profile)
+                    <UserCheck className="h-5 w-5 text-[#00875A]" />
+                    ข้อมูลรายละเอียดผู้ป่วย (Patient Profile)
                 </CardTitle>
                 {!isModal && (
                     <Button
@@ -1934,11 +2087,20 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                         <p className="text-slate-600 font-mono text-xs sm:text-sm">
                             CN: <span className="font-bold text-sm text-[#00875A]">{patient?.op_hn || hn}</span>
                         </p>
-                        <div className="flex items-center gap-1.5 mt-1">
+                        {patient && (
+                            <p className="text-xs text-slate-500 font-medium">
+                                อายุ: <span className="text-slate-700 font-medium">{formatPatientAge(patient)}</span>
+                            </p>
+                        )}
+                        {patient && (
+                            <p className="text-xs text-slate-500 font-medium">
+                                เพศ: <span className="text-slate-700 font-semibold">{formatPatientSex(patient.op_sex || patient.OP_SEX)}</span>
+                            </p>
+                        )}
+                        <div className="pt-0.5">
                             <Badge variant="outline" className="bg-white text-slate-700 text-xs px-2 py-0.5 font-medium">
                                 Visit No: {patient?.VT_NO || '-'}
                             </Badge>
-                            <span className="text-xs text-slate-500 font-medium">{formatPatientAge(patient)} {patient?.op_sex ? `/ ${patient.op_sex}` : ''}</span>
                         </div>
                     </div>
                 </div>
@@ -1993,10 +2155,9 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                 type="button"
                                 onClick={() => setIsVitalsModalOpen(true)}
                                 size="sm"
-                                variant="ghost"
-                                className="h-6 px-2 text-[11px] font-bold text-[#007A4D] hover:bg-[#E8F8F2] rounded-full flex items-center gap-1 cursor-pointer -mr-1"
+                                className="h-6 px-2.5 text-[11px] font-bold liquid-glass-btn-primary text-white rounded-full flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 transition-all"
                             >
-                                <Edit3 className="h-3 w-3" />
+                                <Edit3 className="h-3 w-3 shrink-0" />
                                 <span>กรอกข้อมูล</span>
                             </Button>
                         )}
@@ -2061,7 +2222,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                         {/* อาการเบื้องต้น (Chief Complaint) */}
                         <div className="p-2 liquid-glass-box rounded-xl space-y-0.5">
                             <span className="text-xs font-semibold text-slate-500 block flex items-center gap-1 mb-0.5 truncate">
-                                <FileText className="h-3.5 w-3.5 text-[#00875A]" /> อาการเบื้องต้น
+                                <FileText className="h-3.5 w-3.5 text-[#00875A]" /> อาการเบื้องต้น (Chief Complaint)
                             </span>
                             <span className="font-medium text-xs sm:text-sm text-slate-800 block truncate" title={patient?.OP_CHIEF || patient?.OP_DETAIL || '-'}>
                                 {patient?.OP_CHIEF || patient?.OP_DETAIL || '-'}
@@ -2085,7 +2246,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
 
     return (
         <AuthenticatedLayout>
-            <Head title={`แก้ไขผลตรวจ X-Ray - ${patient?.fullname || hn}`} />
+            <Head title={`พิมพ์ผลตรวจ - ${patient?.fullname || hn}`} />
 
             <div className="min-h-[calc(100vh-65px)] flex flex-col">
 
@@ -2533,6 +2694,29 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
 
                         <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
 
+                        {/* Ref Doc Button (Always enabled in both Read Mode & Edit Mode) */}
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 px-2.5 text-xs font-bold rounded-xl border-emerald-300 text-emerald-800 bg-emerald-50/90 hover:bg-emerald-100 shadow-2xs cursor-pointer touch-manipulation flex items-center gap-1.5 shrink-0"
+                            title="ระบุ / แก้ไขแพทย์ผู้ส่งตรวจ (Ref Doc)"
+                            onClick={() => {
+                                setRefDocInput(refDoc || patient?.OP_Ref_Doc || '');
+                                setIsRefDocModalOpen(true);
+                            }}
+                        >
+                            <UserCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                            <span className="shrink-0">Ref Doc</span>
+                            {(refDoc || patient?.OP_Ref_Doc) && (
+                                <span className="inline-block whitespace-nowrap text-[11px] font-semibold text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-md">
+                                    {refDoc || patient?.OP_Ref_Doc}
+                                </span>
+                            )}
+                        </Button>
+
+                        <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
+
                         {/* Zoom & Auto-Fit Controls (Always fully clickable in read & edit modes) */}
                         <div className="flex items-center gap-0.5 bg-slate-100/90 border border-slate-200/80 rounded-xl p-0.5 shadow-2xs shrink-0">
                             <Button
@@ -2678,7 +2862,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                             <div key={i} id={`xray-page-container-${i}`} className="flex flex-col items-center group shrink-0">
                                                 {/* Page Container Header Tag */}
                                                 <div className="w-full flex justify-between items-center text-[11px] font-bold text-slate-600 mb-1.5 px-1">
-                                                    <span className="text-slate-800 font-bold">ผลตรวจ X-Ray — หน้า {i + 1}</span>
+                                                    <span className="text-slate-800 font-bold">ผลตรวจ - หน้า {i + 1}</span>
                                                     <div className="flex items-center gap-2">
                                                         <span className="liquid-glass-box text-slate-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold">
                                                             หน้า {i + 1} / {pages.length}
@@ -2736,6 +2920,7 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                                                         enterSignalRef={enterSignalRef}
                                                         onFocused={() => setFocusPage(null)}
                                                         editable={isEditing}
+                                                        onCursorMove={scrollCursorIntoView}
                                                     />
                                                 </div>
                                             </div>
@@ -2887,79 +3072,80 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
 
             {/* Modal Form for Adding / Editing Preset */}
             <Dialog open={isAddPresetOpen} onOpenChange={setIsAddPresetOpen}>
-                <DialogContent className="sm:max-w-2xl w-full bg-white rounded-2xl p-7 shadow-2xl border border-slate-200">
-                    <DialogHeader>
-                        <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+                <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col w-[94vw] rounded-3xl p-6 sm:p-7 liquid-glass-card shadow-2xl border border-white/80 overflow-hidden">
+                    <DialogHeader className="shrink-0 text-left border-b border-slate-200/80 pb-3">
+                        <DialogTitle className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
                             {editingPreset ? (
                                 <>
-                                    <Edit3 className="h-5 w-5 text-[#00875A]" />
-                                    แก้ไข Preset (PHM_XRAY)
+                                    <Edit3 className="h-5.5 w-5.5 text-[#00875A] shrink-0" />
+                                    <span>แก้ไข Preset ผลตรวจ</span>
                                 </>
                             ) : (
                                 <>
-                                    <Sparkles className="h-5 w-5 text-[#00875A]" />
-                                    เพิ่ม Preset ใหม่ (บันทึกลงฐานข้อมูล PHM_XRAY)
+                                    <Sparkles className="h-5.5 w-5.5 text-[#00875A] shrink-0" />
+                                    <span>เพิ่ม Preset ใหม่</span>
                                 </>
                             )}
                         </DialogTitle>
                     </DialogHeader>
 
-                    <form onSubmit={handleSavePresetForm} className="space-y-5 pt-2">
-                        <div className="space-y-2">
-                            <Label className="text-sm font-bold text-slate-700">
+                    <form onSubmit={handleSavePresetForm} className="space-y-4 pt-3 flex-1 flex flex-col min-h-0 overflow-y-auto">
+                        <div className="space-y-1.5 shrink-0">
+                            <Label className="text-xs sm:text-sm font-bold text-slate-700">
                                 ชื่อปุ่ม / หัวข้อข้อความ <span className="text-rose-500">*</span>
                             </Label>
                             <Input
+                                ref={presetLabelInputRef}
                                 type="text"
                                 required
                                 value={newPresetLabel}
                                 onChange={(e) => setNewPresetLabel(e.target.value)}
-                                placeholder="เช่น: ปอดอักเสบ (Pneumonia) หรือ Upper Abdomen Normal"
-                                className="h-10 text-sm bg-white font-medium border-slate-300 rounded-xl focus:border-[#00875A] focus:ring-2 focus:ring-[#00875A]/20"
+                                placeholder="กรอกชื่อ Preset"
+                                className="h-11 text-sm sm:text-base px-4 bg-white font-medium border-slate-300 rounded-xl focus-visible:ring-[#00875A]/20 focus-visible:border-[#00875A]"
                             />
                         </div>
 
-                        <div className="space-y-2">
-                            <Label className="text-sm font-bold text-slate-700">
+                        <div className="space-y-1.5 flex-1 flex flex-col min-h-0">
+                            <Label className="text-xs sm:text-sm font-bold text-slate-700 shrink-0">
                                 รายละเอียดข้อความผลตรวจที่จะแทรก <span className="text-rose-500">*</span>
                             </Label>
                             <textarea
                                 required
-                                rows={8}
+                                rows={10}
                                 value={newPresetText}
                                 onChange={(e) => setNewPresetText(e.target.value)}
-                                placeholder="เช่น:&#10;Liver: Normal / Fatty change&#10;Gallbladder: Normal&#10;สรุปผล: ไม่พบความผิดปกติ"
-                                className="w-full text-sm p-4 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-[#00875A] focus:ring-2 focus:ring-[#00875A]/20 font-sans leading-relaxed"
+                                placeholder="กรอก Preset"
+                                className="w-full flex-1 text-sm sm:text-base p-4 sm:p-5 bg-white font-medium text-slate-800 border border-slate-300 rounded-2xl focus:outline-none focus:border-[#00875A] focus:ring-2 focus:ring-[#00875A]/20 font-sans leading-relaxed min-h-[220px] sm:min-h-[300px] resize-y placeholder:text-slate-400"
                             />
                         </div>
 
-                        <DialogFooter className="flex gap-2 pt-3 border-t border-slate-100">
+                        <DialogFooter className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200/80 shrink-0">
                             <Button
                                 type="button"
                                 variant="outline"
                                 onClick={() => setIsAddPresetOpen(false)}
-                                className="h-10 px-5 text-sm font-bold rounded-xl border-slate-300 hover:bg-slate-100 cursor-pointer"
+                                className="h-10 px-6 text-sm font-bold rounded-full border-slate-300 hover:bg-slate-100 cursor-pointer touch-manipulation transition-all active:scale-95"
                             >
                                 ยกเลิก
                             </Button>
                             <Button
                                 type="submit"
                                 disabled={isSavingPreset}
-                                className="h-10 px-6 liquid-glass-btn-primary text-white text-sm font-bold rounded-xl shadow-sm cursor-pointer flex items-center gap-1.5"
+                                className="h-10 px-7 liquid-glass-btn-primary text-white text-sm font-bold rounded-full shadow-xs cursor-pointer flex items-center gap-1.5 touch-manipulation transition-all active:scale-95"
                             >
                                 {isSavingPreset ? (
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : editingPreset ? (
-                                    <Edit3 className="h-4 w-4 mr-1.5" />
+                                    <Save className="h-4 w-4" />
                                 ) : (
-                                    <Plus className="h-4 w-4 mr-1.5" />
+                                    <Plus className="h-4 w-4" />
                                 )}
                                 <span>
                                     {isSavingPreset
                                         ? 'กำลังบันทึก...'
                                         : editingPreset
                                             ? 'บันทึกการแก้ไข'
-                                            : 'บันทึกลงฐานข้อมูล (PHM_XRAY)'}
+                                            : 'บันทึก Preset'}
                                 </span>
                             </Button>
                         </DialogFooter>
@@ -3021,20 +3207,167 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
             {toastVisible && (
                 <div
                     className={`fixed bottom-7 right-7 z-50 pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] transform ${toastActive
-                            ? 'translate-y-0 opacity-100 scale-100'
-                            : 'translate-y-12 opacity-0 scale-95'
+                        ? 'translate-y-0 opacity-100 scale-100'
+                        : 'translate-y-12 opacity-0 scale-95'
                         }`}
                 >
                     <div className="flex flex-col liquid-glass-toast text-slate-800 px-6 py-3.5 rounded-2xl sm:rounded-3xl shadow-2xl pointer-events-auto min-w-[260px] sm:min-w-[300px]">
                         <span className="text-[15px] sm:text-base font-extrabold text-slate-900 tracking-tight">
-                            บันทึกสำเร็จ
+                            {toastMessage.title}
                         </span>
                         <span className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
-                            บันทึกผลการตรวจเรียบร้อยแล้ว
+                            {toastMessage.desc}
                         </span>
                     </div>
                 </div>
             )}
+
+            {/* Ref Doc Edit / Select Modal */}
+            <Dialog open={isRefDocModalOpen} onOpenChange={setIsRefDocModalOpen}>
+                <DialogContent className="sm:max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+                    <DialogHeader>
+                        <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                            <UserCheck className="h-5 w-5 text-slate-900 shrink-0" />
+                            <span>แพทย์ผู้ส่งตรวจ (Ref. Doctor)</span>
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        {/* Patient context badge (3 lines) */}
+                        <div className="p-3 bg-slate-50/90 rounded-xl border border-slate-200/80 text-xs sm:text-[13px] space-y-1.5 leading-relaxed">
+                            <div className="flex items-baseline">
+                                <span className="w-16 sm:w-18 text-slate-500 font-medium shrink-0">ผู้ป่วย :</span>
+                                <span className="font-bold text-slate-900 truncate">{patient?.fullname || '-'}</span>
+                            </div>
+                            <div className="flex items-baseline">
+                                <span className="w-16 sm:w-18 text-slate-500 font-medium shrink-0">CN :</span>
+                                <span className="font-bold text-[#00875A] font-mono">{patient?.op_hn || hn}</span>
+                            </div>
+                            <div className="flex items-baseline">
+                                <span className="w-16 sm:w-18 text-slate-500 font-medium shrink-0">Visit No :</span>
+                                <span className="font-semibold text-slate-800 font-mono">
+                                    <span className="font-bold text-slate-900">{patient?.VT_NO || '-'}</span>
+                                    {(patient?.formatted_date || patient?.pb_now1) && (
+                                        <span className="text-slate-600 font-medium ml-1.5">
+                                            - {formatDateGregorian(patient?.formatted_date || patient?.pb_now1)}
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Text Input with Clear X Button */}
+                        <div className="space-y-1.5">
+                            <Label htmlFor="ref-doc-input" className="text-xs font-semibold text-slate-700">
+                                ชื่อแพทย์ผู้ส่งตรวจ (Ref Doc Name)
+                            </Label>
+                            <div className="relative">
+                                <Input
+                                    id="ref-doc-input"
+                                    ref={refDocInputRef}
+                                    value={refDocInput}
+                                    onChange={(e) => setRefDocInput(e.target.value)}
+                                    placeholder="ระบุชื่อแพทย์ผู้ส่งตรวจ..."
+                                    className="h-10 text-sm font-medium focus-visible:ring-emerald-500 rounded-xl pr-9"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            handleSaveRefDoc();
+                                        }
+                                    }}
+                                />
+                                {refDocInput && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setRefDocInput('');
+                                            if (refDocInputRef.current) {
+                                                refDocInputRef.current.focus();
+                                            }
+                                        }}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"
+                                        title="ล้างข้อมูล / ยกเลิกการเลือก"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Quick Pick Doctors from System */}
+                        {doctors && doctors.length > 0 && (
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-xs text-slate-500 font-semibold">
+                                    <span>เลือกจากรายชื่อแพทย์ในระบบ:</span>
+                                    <span className="text-[11px] text-slate-400 font-normal">คลิกเพื่อเลือกรายชื่อ</span>
+                                </div>
+                                <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                                    {doctors.map((d) => {
+                                        const isSelected = (refDocInput || '').trim() === d.name.trim();
+                                        return (
+                                            <button
+                                                key={d.id || d.name}
+                                                type="button"
+                                                onClick={() => {
+                                                    setRefDocInput(d.name);
+                                                    if (refDocInputRef.current) {
+                                                        refDocInputRef.current.focus();
+                                                    }
+                                                }}
+                                                className={`w-full flex items-center justify-between px-3 py-2 text-xs rounded-xl border text-left transition-all cursor-pointer ${isSelected
+                                                        ? 'bg-emerald-50 border-emerald-300 text-emerald-900 font-bold shadow-2xs'
+                                                        : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700 font-medium'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center gap-2 truncate">
+                                                    <div className={`h-6 w-6 rounded-lg flex items-center justify-center text-[10px] font-bold ${isSelected ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                                                        }`}>
+                                                        {d.is_doctor ? 'DR' : 'MD'}
+                                                    </div>
+                                                    <span className="truncate">{d.name}</span>
+                                                </div>
+                                                {isSelected && <Check className="h-4 w-4 text-emerald-600 shrink-0" />}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="gap-2 sm:gap-2">
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full px-4 text-xs font-semibold cursor-pointer transition-all active:scale-95"
+                            onClick={() => setIsRefDocModalOpen(false)}
+                            disabled={isSavingRefDoc}
+                        >
+                            ยกเลิก
+                        </Button>
+                        <Button
+                            type="button"
+                            size="sm"
+                            className="liquid-glass-btn-primary text-white font-bold rounded-full px-4 text-xs cursor-pointer transition-all active:scale-95 shadow-xs"
+                            onClick={() => handleSaveRefDoc()}
+                            disabled={isSavingRefDoc}
+                        >
+                            {isSavingRefDoc ? (
+                                <>
+                                    <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                                    <span>กำลังบันทึก...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Save className="h-4 w-4 mr-1.5" />
+                                    <span>บันทึก</span>
+                                </>
+                            )}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             {/* Patient Vitals & Clinical Info Modal */}
             <PatientVitalsModal
@@ -3042,9 +3375,10 @@ export default function UltrasoundResult({ patient, hn, dbPresets = [] }: Ultras
                 onOpenChange={setIsVitalsModalOpen}
                 patient={patient}
                 onSuccess={() => {
-                    // Inertia will reload page props automatically on post
+                    triggerSaveToast('บันทึกสำเร็จ', 'บันทึกข้อมูลผู้ป่วยเรียบร้อยแล้ว');
                 }}
             />
+
 
             {/* Floating 3D Liquid Glass Context Menu for Presets */}
             {presetContextMenu.isOpen && presetContextMenu.preset && (

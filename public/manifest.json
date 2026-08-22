@@ -1,6 +1,6 @@
 {
-  "name": "Medical Patient Refer System",
-  "short_name": "Medical System",
+  "name": "OPD Referral Management System",
+  "short_name": "OPD Referral",
   "description": "ระบบเวชระเบียนผู้ป่วยและรายงานผลตรวจทางการแพทย์",
   "start_url": "/",
   "scope": "/",

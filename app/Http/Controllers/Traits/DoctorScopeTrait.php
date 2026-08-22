@@ -218,4 +218,75 @@ trait DoctorScopeTrait
 
         return $items;
     }
+
+    /**
+     * Synchronize the OP_Xray_Sts flag ('1' if images exist, '0' if empty) in OPT_VISIT.
+     * If $vtId is provided, updates only that visit. Otherwise updates all visits for the given HN.
+     */
+    public function syncVisitXrayStatus(string $hn, ?int $vtId = null): void
+    {
+        try {
+            $allImages = $this->getXrayImagesData($hn);
+
+            if ($vtId !== null && $vtId > 0) {
+                $count = 0;
+                foreach ($allImages as $img) {
+                    if (!empty($img['vt_id']) && (int) $img['vt_id'] === $vtId) {
+                        $count++;
+                    }
+                }
+                // Also check directly on disk in folder uploads/xray/{hn}/{vtId}
+                $vtDir = public_path("uploads/xray/{$hn}/{$vtId}");
+                if (file_exists($vtDir) && is_dir($vtDir)) {
+                    $files = array_diff(scandir($vtDir), ['.', '..']);
+                    $imageFiles = array_filter($files, function ($f) {
+                        return !str_ends_with($f, '.json');
+                    });
+                    $count = max($count, count($imageFiles));
+                }
+
+                $status = ($count > 0) ? '1' : '0';
+                DB::statement("UPDATE opt_visit SET OP_Xray_Sts = :sts WHERE VT_ID = :vtId", [
+                    'sts' => $status,
+                    'vtId' => $vtId,
+                ]);
+            } else {
+                // Sync all visits for this HN
+                $visits = DB::select("SELECT VT_ID FROM opt_visit WHERE op_hn = :hn", ['hn' => $hn]);
+                if (!empty($visits)) {
+                    // Build map of counts per vt_id
+                    $countsByVt = [];
+                    foreach ($allImages as $img) {
+                        if (!empty($img['vt_id'])) {
+                            $vId = (int) $img['vt_id'];
+                            $countsByVt[$vId] = ($countsByVt[$vId] ?? 0) + 1;
+                        }
+                    }
+
+                    foreach ($visits as $v) {
+                        $curVtId = (int) $v->VT_ID;
+                        $vtDir = public_path("uploads/xray/{$hn}/{$curVtId}");
+                        $diskCount = 0;
+                        if (file_exists($vtDir) && is_dir($vtDir)) {
+                            $files = array_diff(scandir($vtDir), ['.', '..']);
+                            $imageFiles = array_filter($files, function ($f) {
+                                return !str_ends_with($f, '.json');
+                            });
+                            $diskCount = count($imageFiles);
+                        }
+                        $totalCount = max($countsByVt[$curVtId] ?? 0, $diskCount);
+                        $status = ($totalCount > 0) ? '1' : '0';
+
+                        DB::statement("UPDATE opt_visit SET OP_Xray_Sts = :sts WHERE VT_ID = :vtId", [
+                            'sts' => $status,
+                            'vtId' => $curVtId,
+                        ]);
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::warning("Error syncing OP_Xray_Sts for HN {$hn}: " . $e->getMessage());
+        }
+    }
 }
+

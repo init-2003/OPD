@@ -26,7 +26,8 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/Components/ui/badge';
 import { PatientVisit } from '@/types';
-import { cleanDecimals, formatPatientAge } from '@/lib/utils';
+import { cleanDecimals, formatPatientAge, formatPatientSex } from '@/lib/utils';
+
 
 interface PatientVitalsModalProps {
     open: boolean;
@@ -112,10 +113,8 @@ export default function PatientVitalsModal({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 liquid-glass-card shadow-2xl border border-white/80">
                 <DialogHeader className="text-left border-b border-slate-200/80 pb-3">
-                    <DialogTitle className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2.5">
-                        <div className="h-9 w-9 rounded-2xl bg-[#E8F8F2] border border-[#A7F3D0] flex items-center justify-center text-[#00875A] shrink-0">
-                            <FileText className="h-5 w-5" />
-                        </div>
+                    <DialogTitle className="text-lg sm:text-xl font-bold text-slate-900 flex items-center gap-2">
+                        <UserCheck className="h-5 w-5 sm:h-6 sm:w-6 text-slate-900 shrink-0" />
                         <span>กรอกและแก้ไขข้อมูลผู้ป่วย (Patient Profile)</span>
                     </DialogTitle>
                 </DialogHeader>
@@ -137,20 +136,23 @@ export default function PatientVitalsModal({
                                     </div>
                                 )}
                             </div>
-                            <div className="space-y-1 overflow-hidden">
+                            <div className="space-y-0.5 overflow-hidden">
                                 <h4 className="font-bold text-base sm:text-lg truncate text-slate-900 leading-tight">
                                     {patient.fullname || 'ไม่ระบุชื่อ'}
                                 </h4>
                                 <p className="text-slate-600 font-mono text-xs sm:text-sm">
                                     CN: <span className="font-bold text-sm text-[#00875A]">{patient.op_hn || (patient as any).OP_HN || '-'}</span>
                                 </p>
-                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                                    <Badge variant="outline" className="bg-white text-slate-700 text-xs px-2 py-0.5 font-medium border-slate-300">
+                                <p className="text-xs text-slate-500 font-medium">
+                                    อายุ: <span className="text-slate-700 font-medium">{formatPatientAge(patient)}</span>
+                                </p>
+                                <p className="text-xs text-slate-500 font-medium">
+                                    เพศ: <span className="text-slate-700 font-semibold">{formatPatientSex(patient.op_sex || (patient as any).OP_SEX)}</span>
+                                </p>
+                                <div className="pt-0.5">
+                                    <Badge variant="outline" className="bg-white text-slate-700 text-xs px-2.5 py-0.5 font-medium border-slate-300">
                                         Visit No: {patient.VT_NO || '-'}
                                     </Badge>
-                                    <span className="text-xs text-slate-600 font-medium whitespace-nowrap">
-                                        {formatPatientAge(patient)} {patient.op_sex ? `/ ${patient.op_sex}` : ''}
-                                    </span>
                                 </div>
                             </div>
                         </div>

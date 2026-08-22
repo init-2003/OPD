@@ -10,19 +10,21 @@ use Symfony\Component\HttpFoundation\Response;
 class EnsureAllowedUser
 {
     /**
-     * Only doctors (EMP_STS = 'D') or Administrators (Sts = 'Administrator')
-     * may use the system. Staff accounts are logged out immediately.
+     * Only users with Sts = 'Administrator' and Degree = 4
+     * may use the system. Unauthorized accounts are logged out immediately.
      */
     public function handle(Request $request, Closure $next): Response
     {
         if (Auth::check()) {
             $user = Auth::user();
-            if ($user->EMP_STS !== 'D' && $user->Sts !== 'Administrator') {
+            if ($user->Sts !== 'Administrator' || (int)$user->Degree !== 4) {
                 Auth::logout();
                 $request->session()->invalidate();
                 $request->session()->regenerateToken();
 
-                return redirect('/login');
+                return redirect('/login')->withErrors([
+                    'PB_user' => 'บัญชีผู้ใช้นี้ไม่มีสิทธิ์เข้าสู่ระบบ (เฉพาะแพทย์เท่านั้น)',
+                ]);
             }
         }
 

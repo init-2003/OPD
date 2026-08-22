@@ -1,5 +1,5 @@
-// OPD System Progressive Web App (PWA) Service Worker
-const CACHE_NAME = 'opd-pwa-cache-v3';
+// OPD Referral Management System Progressive Web App (PWA) Service Worker
+const CACHE_NAME = 'opd-pwa-cache-v4';
 const STATIC_ASSETS = [
     '/favicon.ico',
     '/favicon-32x32.png',
@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
     '/manifest.json',
     '/icons/icon-192x192.png',
     '/icons/icon-512x512.png',
+    '/LOGO-NON-BG.png',
     '/images/LOGO-NON-BG.png',
 ];
 

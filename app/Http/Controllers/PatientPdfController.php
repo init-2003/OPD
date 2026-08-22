@@ -161,8 +161,7 @@ class PatientPdfController extends Controller
             $sex = $rawSex !== '' ? $rawSex : '-';
         }
 
-        $refDoc = $patient['OP_Ref_Doc'] ?? $patient['OP_SEND_DR_Name'] ?? $patient['OP_SEND_DR'] ?? $patient['OP_DR_NAME'] ?? '';
-        $refDoc = trim((string) $refDoc);
+        $refDoc = $this->resolveRefDoc($patient);
 
         $reportBy = $patient['Report_By'] ?? '';
         $reportBy = trim((string) $reportBy);
@@ -433,7 +432,13 @@ class PatientPdfController extends Controller
         // Page header/footer: mPDF repeats these on every page. Inline styles
         // only (mPDF does not handle <style> blocks in header/footer HTML).
         // Coordinates are template pt measured from the top-left of the page.
+        $pageNumberHtml = '';
+        if ($chunkIndex > 1) {
+            $pageNumberHtml = "<div style='position:absolute;left:470pt;top:18pt;width:100pt;text-align:right;font-size:16pt;color:#333333;white-space:nowrap;'>{PAGENO} / {nbpg}</div>";
+        }
+
         $headerHtml = ''
+            . $pageNumberHtml
             . "<div style='position:absolute;left:76pt;top:117pt;font-size:16pt;color:#000;'>{$opHn}</div>"
             . "<div style='position:absolute;left:76pt;top:139.5pt;font-size:16pt;color:#000;'>{$fullname}</div>"
             . "<div style='position:absolute;left:395pt;top:136.5pt;font-size:16pt;color:#000;'>{$age}</div>"
@@ -532,23 +537,27 @@ class PatientPdfController extends Controller
             $filterVtId = null;
         }
 
-        $allImages = $this->getXrayImagesData($hn);
-
         $validImagePaths = [];
+        $baseUploadDir = public_path("uploads/xray/{$hn}");
+
         if (!empty($fileList)) {
             foreach ($fileList as $fn) {
-                $cleanFn = str_replace('\\', '/', trim($fn));
-                $baseFn = basename($cleanFn);
-                foreach ($allImages as $img) {
-                    if ($img['filename'] === $cleanFn || basename($img['filename']) === $baseFn) {
-                        if (file_exists($img['full_path'])) {
-                            $validImagePaths[] = $img['full_path'];
-                            break;
-                        }
+                $cleanFn = str_replace(['\\', '../', '..'], ['/', '', ''], trim($fn));
+                $directPath = $baseUploadDir . '/' . $cleanFn;
+                if (file_exists($directPath) && is_file($directPath)) {
+                    $validImagePaths[] = $directPath;
+                } else {
+                    $baseFn = basename($cleanFn);
+                    $matches = glob($baseUploadDir . '/*/' . $baseFn);
+                    if (!empty($matches) && is_file($matches[0])) {
+                        $validImagePaths[] = $matches[0];
                     }
                 }
             }
-        } else {
+        }
+
+        if (empty($validImagePaths)) {
+            $allImages = $this->getXrayImagesData($hn);
             foreach ($allImages as $img) {
                 if ($filterVtId !== null && ($img['vt_id'] ?? null) !== (int) $filterVtId) {
                     continue;
@@ -568,11 +577,21 @@ class PatientPdfController extends Controller
         $defaultFontConfig = (new \Mpdf\Config\FontVariables())->getDefaults();
         $fontData = $defaultFontConfig['fontdata'];
 
+        $mpdfTempDir = storage_path('app/mpdf');
+        if (!file_exists($mpdfTempDir)) {
+            @mkdir($mpdfTempDir, 0777, true);
+        }
+
         $mpdf = new Mpdf([
             'mode' => 'utf-8',
             'format' => 'A4',
             'autoScriptToLang' => false,
             'autoLangToFont' => false,
+            'simpleTables' => true,
+            'packTableData' => true,
+            'useSubstitutions' => false,
+            'img_dpi' => 96,
+            'tempDir' => $mpdfTempDir,
             'fontDir' => array_merge($fontDirs, [
                 'C:/Windows/Fonts',
                 'C:/WINDOWS/Fonts',
@@ -599,8 +618,8 @@ class PatientPdfController extends Controller
             'default_font' => 'angsananew',
             'margin_left' => 10.0,
             'margin_right' => 8.4,
-            'margin_top' => 65.0,
-            'margin_bottom' => 26.5,
+            'margin_top' => 61.9,
+            'margin_bottom' => 27.1,
             'watermarkImgBehind' => true,
         ]);
 
@@ -631,8 +650,7 @@ class PatientPdfController extends Controller
             $sex = $rawSex !== '' ? $rawSex : '-';
         }
 
-        $refDoc = $patient['OP_Ref_Doc'] ?? $patient['OP_SEND_DR_Name'] ?? $patient['OP_SEND_DR'] ?? $patient['OP_DR_NAME'] ?? '';
-        $refDoc = trim((string) $refDoc);
+        $refDoc = $this->resolveRefDoc($patient);
 
         $reportBy = $patient['Report_By'] ?? '';
         $reportBy = trim((string) $reportBy);
@@ -695,8 +713,22 @@ class PatientPdfController extends Controller
 
         $reportOn = $reportOnBase;
 
+        // Number of images per page (1, 2, 4, or 6)
+        $layout = (int) $request->query('layout', 1);
+        if (!in_array($layout, [1, 2, 4, 6], true)) {
+            $layout = 1;
+        }
+
+        $pageCount = (int) ceil(count($validImagePaths) / $layout);
+
+        $pageNumberHtml = '';
+        if ($pageCount > 1) {
+            $pageNumberHtml = "<div style='position:absolute;left:470pt;top:18pt;width:100pt;text-align:right;font-size:16pt;color:#333333;white-space:nowrap;'>{PAGENO} / {nbpg}</div>";
+        }
+
         // Page header/footer: exact same coordinates as text findings PDF
         $headerHtml = ''
+            . $pageNumberHtml
             . "<div style='position:absolute;left:76pt;top:117pt;font-size:16pt;color:#000;'>{$opHn}</div>"
             . "<div style='position:absolute;left:76pt;top:139.5pt;font-size:16pt;color:#000;'>{$fullname}</div>"
             . "<div style='position:absolute;left:395pt;top:136.5pt;font-size:16pt;color:#000;'>{$age}</div>"
@@ -711,125 +743,186 @@ class PatientPdfController extends Controller
         $mpdf->SetHTMLHeader($headerHtml);
         $mpdf->SetHTMLFooter($footerHtml);
 
-        // Number of images per page (1, 2, 4, or 6)
-        $layout = (int) $request->query('layout', 1);
-        if (!in_array($layout, [1, 2, 4, 6], true)) {
-            $layout = 1;
-        }
+        // Helper to calculate exact rendered dimensions preserving aspect ratio
+        $calcRenderSize = function (?string $imgPath, float $maxW, float $maxH): array {
+            if (!$imgPath || !file_exists($imgPath)) {
+                return ['w' => $maxW, 'h' => $maxH];
+            }
+            $info = @getimagesize($imgPath);
+            $w = ($info && $info[0] > 0) ? (float)$info[0] : 4.0;
+            $h = ($info && $info[1] > 0) ? (float)$info[1] : 3.0;
+            $ar = $w / $h;
+            if ($ar > ($maxW / $maxH)) {
+                $rw = $maxW;
+                $rh = round($maxW / $ar, 1);
+            } else {
+                $rh = $maxH;
+                $rw = round($maxH * $ar, 1);
+            }
+            return ['w' => $rw, 'h' => $rh];
+        };
 
         $htmlParts = [];
+        $htmlParts[] = '
+        <style>
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 0; }
+            table { border-collapse: collapse; margin: 0; padding: 0; }
+            td { margin: 0; padding: 0; vertical-align: middle; text-align: center; }
+        </style>';
+
+        $totalBoxHeight = 208.0; // mm between top line (61.9mm) and bottom line (269.9mm)
+
         $pageCount = (int) ceil(count($validImagePaths) / $layout);
         for ($page = 0; $page < $pageCount; $page++) {
             $pageImages = array_slice($validImagePaths, $page * $layout, $layout);
             if (empty($pageImages)) continue;
 
             if ($layout === 1) {
-                // 1 Image per page: fixed 1x1 slot (200mm height)
+                // 1 Image per page: centered vertically in 208mm box
                 $img = $pageImages[0] ?? null;
-                $imgTag = $img ? '<img src="' . $img . '" style="max-width: 185mm; max-height: 195mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
+                $sz = $calcRenderSize($img, 188.0, 200.0);
+                $totalH = $sz['h'];
+                $topGap = max(0.0, round(($totalBoxHeight - $totalH) / 2, 1));
+
                 $pageHtml = '
-                <table style="width: 100%; height: 200mm; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;">
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 200mm; border: none; margin: 0; padding: 0;">
-                            ' . $imgTag . '
-                        </td>
-                    </tr>
-                </table>';
+                <div style="margin: 0; padding: 0;">
+                    <div style="height: ' . $topGap . 'mm; line-height: ' . $topGap . 'mm; font-size: 1pt;">&nbsp;</div>
+                    <div style="text-align: center; margin: 0; padding: 0;">
+                        ' . ($img ? '<img src="' . $img . '" style="width: ' . $sz['w'] . 'mm; height: ' . $sz['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                    </div>
+                </div>';
             } elseif ($layout === 2) {
-                // 2 Images per page: fixed 1 column x 2 rows (each 98mm height)
+                // 2 Images per page: stacked vertically and centered in 208mm box
                 $img0 = $pageImages[0] ?? null;
                 $img1 = $pageImages[1] ?? null;
+                $gap = 3.0; // mm between images
 
-                $imgTag0 = $img0 ? '<img src="' . $img0 . '" style="max-width: 185mm; max-height: 94mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag1 = $img1 ? '<img src="' . $img1 . '" style="max-width: 185mm; max-height: 94mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
+                $sz0 = $calcRenderSize($img0, 188.0, 97.0);
+                $sz1 = $img1 ? $calcRenderSize($img1, 188.0, 97.0) : null;
+
+                $totalH = $sz0['h'] + ($sz1 ? ($sz1['h'] + $gap) : 0.0);
+                $topGap = max(0.0, round(($totalBoxHeight - $totalH) / 2, 1));
 
                 $pageHtml = '
-                <table style="width: 100%; height: 200mm; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;">
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 98mm; border: none; margin: 0; padding: 1mm 0;">
-                            ' . $imgTag0 . '
-                        </td>
-                    </tr>
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 98mm; border: none; margin: 0; padding: 1mm 0;">
-                            ' . $imgTag1 . '
-                        </td>
-                    </tr>
-                </table>';
+                <div style="margin: 0; padding: 0;">
+                    <div style="height: ' . $topGap . 'mm; line-height: ' . $topGap . 'mm; font-size: 1pt;">&nbsp;</div>
+                    <div style="text-align: center; margin: 0; padding: 0;">
+                        ' . ($img0 ? '<img src="' . $img0 . '" style="width: ' . $sz0['w'] . 'mm; height: ' . $sz0['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                    </div>
+                    ' . ($img1 && $sz1 ? '
+                    <div style="height: ' . $gap . 'mm; line-height: ' . $gap . 'mm; font-size: 1pt;">&nbsp;</div>
+                    <div style="text-align: center; margin: 0; padding: 0;">
+                        <img src="' . $img1 . '" style="width: ' . $sz1['w'] . 'mm; height: ' . $sz1['h'] . 'mm; margin: 0 auto; display: block;" />
+                    </div>' : '') . '
+                </div>';
             } elseif ($layout === 4) {
-                // 4 Images per page: fixed 2 columns x 2 rows grid (each cell 50% width x 98mm height)
+                // 4 Images per page: 2x2 grid centered vertically in 208mm box
                 $img0 = $pageImages[0] ?? null;
                 $img1 = $pageImages[1] ?? null;
                 $img2 = $pageImages[2] ?? null;
                 $img3 = $pageImages[3] ?? null;
+                $gapH = 3.0;
 
-                $imgTag0 = $img0 ? '<img src="' . $img0 . '" style="max-width: 88mm; max-height: 92mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag1 = $img1 ? '<img src="' . $img1 . '" style="max-width: 88mm; max-height: 92mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag2 = $img2 ? '<img src="' . $img2 . '" style="max-width: 88mm; max-height: 92mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag3 = $img3 ? '<img src="' . $img3 . '" style="max-width: 88mm; max-height: 92mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
+                $sz0 = $calcRenderSize($img0, 90.0, 96.0);
+                $sz1 = $img1 ? $calcRenderSize($img1, 90.0, 96.0) : null;
+                $sz2 = $img2 ? $calcRenderSize($img2, 90.0, 96.0) : null;
+                $sz3 = $img3 ? $calcRenderSize($img3, 90.0, 96.0) : null;
+
+                $row1H = max($sz0['h'], $sz1['h'] ?? 0);
+                $row2H = max($sz2['h'] ?? 0, $sz3['h'] ?? 0);
+
+                $totalH = $row1H + ($row2H > 0 ? ($row2H + $gapH) : 0);
+                $topGap = max(0.0, round(($totalBoxHeight - $totalH) / 2, 1));
 
                 $pageHtml = '
-                <table style="width: 100%; height: 200mm; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;">
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 98mm; width: 50%; border: none; margin: 0; padding: 1.5mm;">
-                            ' . $imgTag0 . '
-                        </td>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 98mm; width: 50%; border: none; margin: 0; padding: 1.5mm;">
-                            ' . $imgTag1 . '
-                        </td>
-                    </tr>
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 98mm; width: 50%; border: none; margin: 0; padding: 1.5mm;">
-                            ' . $imgTag2 . '
-                        </td>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 98mm; width: 50%; border: none; margin: 0; padding: 1.5mm;">
-                            ' . $imgTag3 . '
-                        </td>
-                    </tr>
-                </table>';
+                <div style="margin: 0; padding: 0;">
+                    <div style="height: ' . $topGap . 'mm; line-height: ' . $topGap . 'mm; font-size: 1pt;">&nbsp;</div>
+                    <table style="width: 100%; border-collapse: collapse; border: none; margin: 0 auto; padding: 0; table-layout: fixed;">
+                        <tr>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row1H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img0 ? '<img src="' . $img0 . '" style="width: ' . $sz0['w'] . 'mm; height: ' . $sz0['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row1H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img1 && $sz1 ? '<img src="' . $img1 . '" style="width: ' . $sz1['w'] . 'mm; height: ' . $sz1['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                        </tr>
+                        ' . ($row2H > 0 ? '
+                        <tr>
+                            <td colspan="2" style="height: ' . $gapH . 'mm; line-height: ' . $gapH . 'mm; font-size: 1pt; border: none; margin: 0; padding: 0;">&nbsp;</td>
+                        </tr>
+                        <tr>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row2H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img2 && $sz2 ? '<img src="' . $img2 . '" style="width: ' . $sz2['w'] . 'mm; height: ' . $sz2['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row2H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img3 && $sz3 ? '<img src="' . $img3 . '" style="width: ' . $sz3['w'] . 'mm; height: ' . $sz3['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                        </tr>' : '') . '
+                    </table>
+                </div>';
             } else {
-                // 6 Images per page: fixed 2 columns x 3 rows grid (each cell 50% width x 65mm height)
+                // 6 Images per page: 3x2 grid centered vertically in 208mm box
                 $img0 = $pageImages[0] ?? null;
                 $img1 = $pageImages[1] ?? null;
                 $img2 = $pageImages[2] ?? null;
                 $img3 = $pageImages[3] ?? null;
                 $img4 = $pageImages[4] ?? null;
                 $img5 = $pageImages[5] ?? null;
+                $gapH = 2.5;
 
-                $imgTag0 = $img0 ? '<img src="' . $img0 . '" style="max-width: 88mm; max-height: 60mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag1 = $img1 ? '<img src="' . $img1 . '" style="max-width: 88mm; max-height: 60mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag2 = $img2 ? '<img src="' . $img2 . '" style="max-width: 88mm; max-height: 60mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag3 = $img3 ? '<img src="' . $img3 . '" style="max-width: 88mm; max-height: 60mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag4 = $img4 ? '<img src="' . $img4 . '" style="max-width: 88mm; max-height: 60mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
-                $imgTag5 = $img5 ? '<img src="' . $img5 . '" style="max-width: 88mm; max-height: 60mm; width: auto; height: auto; margin: 0 auto; display: block;" />' : '&nbsp;';
+                $sz0 = $calcRenderSize($img0, 90.0, 63.0);
+                $sz1 = $img1 ? $calcRenderSize($img1, 90.0, 63.0) : null;
+                $sz2 = $img2 ? $calcRenderSize($img2, 90.0, 63.0) : null;
+                $sz3 = $img3 ? $calcRenderSize($img3, 90.0, 63.0) : null;
+                $sz4 = $img4 ? $calcRenderSize($img4, 90.0, 63.0) : null;
+                $sz5 = $img5 ? $calcRenderSize($img5, 90.0, 63.0) : null;
+
+                $row1H = max($sz0['h'], $sz1['h'] ?? 0);
+                $row2H = max($sz2['h'] ?? 0, $sz3['h'] ?? 0);
+                $row3H = max($sz4['h'] ?? 0, $sz5['h'] ?? 0);
+
+                $totalH = $row1H + ($row2H > 0 ? ($row2H + $gapH) : 0) + ($row3H > 0 ? ($row3H + $gapH) : 0);
+                $topGap = max(0.0, round(($totalBoxHeight - $totalH) / 2, 1));
 
                 $pageHtml = '
-                <table style="width: 100%; height: 200mm; border-collapse: collapse; border: none; margin: 0; padding: 0; table-layout: fixed;">
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 65mm; width: 50%; border: none; margin: 0; padding: 1mm;">
-                            ' . $imgTag0 . '
-                        </td>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 65mm; width: 50%; border: none; margin: 0; padding: 1mm;">
-                            ' . $imgTag1 . '
-                        </td>
-                    </tr>
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 65mm; width: 50%; border: none; margin: 0; padding: 1mm;">
-                            ' . $imgTag2 . '
-                        </td>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 65mm; width: 50%; border: none; margin: 0; padding: 1mm;">
-                            ' . $imgTag3 . '
-                        </td>
-                    </tr>
-                    <tr>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 65mm; width: 50%; border: none; margin: 0; padding: 1mm;">
-                            ' . $imgTag4 . '
-                        </td>
-                        <td align="center" style="text-align: center; vertical-align: middle; height: 65mm; width: 50%; border: none; margin: 0; padding: 1mm;">
-                            ' . $imgTag5 . '
-                        </td>
-                    </tr>
-                </table>';
+                <div style="margin: 0; padding: 0;">
+                    <div style="height: ' . $topGap . 'mm; line-height: ' . $topGap . 'mm; font-size: 1pt;">&nbsp;</div>
+                    <table style="width: 100%; border-collapse: collapse; border: none; margin: 0 auto; padding: 0; table-layout: fixed;">
+                        <tr>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row1H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img0 ? '<img src="' . $img0 . '" style="width: ' . $sz0['w'] . 'mm; height: ' . $sz0['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row1H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img1 && $sz1 ? '<img src="' . $img1 . '" style="width: ' . $sz1['w'] . 'mm; height: ' . $sz1['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                        </tr>
+                        ' . ($row2H > 0 ? '
+                        <tr>
+                            <td colspan="2" style="height: ' . $gapH . 'mm; line-height: ' . $gapH . 'mm; font-size: 1pt; border: none; margin: 0; padding: 0;">&nbsp;</td>
+                        </tr>
+                        <tr>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row2H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img2 && $sz2 ? '<img src="' . $img2 . '" style="width: ' . $sz2['w'] . 'mm; height: ' . $sz2['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row2H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img3 && $sz3 ? '<img src="' . $img3 . '" style="width: ' . $sz3['w'] . 'mm; height: ' . $sz3['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                        </tr>' : '') . '
+                        ' . ($row3H > 0 ? '
+                        <tr>
+                            <td colspan="2" style="height: ' . $gapH . 'mm; line-height: ' . $gapH . 'mm; font-size: 1pt; border: none; margin: 0; padding: 0;">&nbsp;</td>
+                        </tr>
+                        <tr>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row3H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img4 && $sz4 ? '<img src="' . $img4 . '" style="width: ' . $sz4['w'] . 'mm; height: ' . $sz4['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                            <td align="center" style="text-align: center; vertical-align: middle; width: 50%; height: ' . $row3H . 'mm; border: none; margin: 0; padding: 0 1.5mm;">
+                                ' . ($img5 && $sz5 ? '<img src="' . $img5 . '" style="width: ' . $sz5['w'] . 'mm; height: ' . $sz5['h'] . 'mm; margin: 0 auto; display: block;" />' : '&nbsp;') . '
+                            </td>
+                        </tr>' : '') . '
+                    </table>
+                </div>';
             }
 
             if ($page > 0) {
@@ -842,6 +935,21 @@ class PatientPdfController extends Controller
 
         return response($mpdf->Output('', 'S'))
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'inline; filename="XRAY_Image_' . $opHn . '.pdf"');
+            ->header('Content-Disposition', 'inline; filename="XRAY_Image_' . $opHn . '.pdf"')
+            ->header('Cache-Control', 'private, max-age=300, must-revalidate');
+    }
+
+    /**
+     * Resolve the referring doctor name from patient record (OP_Ref_Doc).
+     * Only returns the explicitly chosen Ref Doc (OP_Ref_Doc). If not selected, returns empty string.
+     */
+    protected function resolveRefDoc(array $patient): string
+    {
+        $refDoc = trim((string) ($patient['OP_Ref_Doc'] ?? ''));
+        if ($refDoc !== '' && $refDoc !== '-') {
+            return $refDoc;
+        }
+
+        return '';
     }
 }

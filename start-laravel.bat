@@ -1,4 +1,4 @@
 @echo off
-cd /d "C:\Users\Windows11\Desktop\TestResults"
+cd /d "%~dp0"
 php artisan serve
 pause

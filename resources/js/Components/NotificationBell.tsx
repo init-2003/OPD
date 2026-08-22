@@ -294,11 +294,21 @@ export default function NotificationBell() {
             fetchNotifications();
         }, 20000);
 
-        // Listen for instant dismiss when clicking "บันทึกผลการตรวจ" or saving results
+        // Listen for instant dismiss when clicking "บันทึกผลการตรวจ" or changing status to "ส่งจัดยา"
         const handleInstantDismiss = (e: Event) => {
             const customEvent = e as CustomEvent<{ hn: string; vt?: string | number }>;
             const { hn, vt } = customEvent.detail || {};
             if (hn) {
+                setRawPatients((prev) =>
+                    prev.filter((p) => {
+                        if (p.op_hn === hn) {
+                            if (vt && String(p.VT_NO || p.vt_id) === String(vt)) return false;
+                            if (!vt) return false;
+                        }
+                        return true;
+                    })
+                );
+
                 setReadKeys((prev) => {
                     const next = new Set(prev);
                     if (vt) next.add(`${hn}-${vt}`);
@@ -370,9 +380,7 @@ export default function NotificationBell() {
                 {/* Header */}
                 <div className="p-3.5 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                        <div className="h-8.5 w-8.5 rounded-full bg-[#E8F8F2] text-[#007A4D] flex items-center justify-center shadow-xs">
-                            <Bell className="h-4.5 w-4.5" />
-                        </div>
+                        <Bell className="h-5 w-5 text-slate-900 shrink-0" />
                         <div>
                             <h4 className="text-sm font-bold text-slate-900 leading-tight">
                                 การแจ้งเตือนผู้ป่วยส่งตัวใหม่

@@ -5,7 +5,7 @@ import { createInertiaApp } from '@inertiajs/react';
 import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createRoot } from 'react-dom/client';
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+const appName = import.meta.env.VITE_APP_NAME || 'OPD Referral Management System';
 
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
@@ -61,6 +61,23 @@ if (typeof window !== 'undefined') {
         } else {
             window.addEventListener('load', registerSW);
         }
+    }
+
+    // Dynamic browser tab favicon assurance
+    const ensureFavicon = () => {
+        const iconLinks = document.querySelectorAll<HTMLLinkElement>("link[rel*='icon']");
+        if (iconLinks.length > 0) {
+            iconLinks.forEach((link) => {
+                if (link.getAttribute('rel') === 'icon' || link.getAttribute('rel') === 'shortcut icon') {
+                    link.href = '/LOGO-NON-BG.png?v=' + Date.now();
+                }
+            });
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', ensureFavicon);
+    } else {
+        ensureFavicon();
     }
 }
 

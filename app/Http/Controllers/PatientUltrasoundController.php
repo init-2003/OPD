@@ -85,10 +85,30 @@ class PatientUltrasoundController extends Controller
             $dbPresets = [];
         }
 
+        $doctors = [];
+        try {
+            $doctorsRaw = DB::select("SELECT Em_id, Em_Fullname, EMP_STS FROM Create_User WHERE EMP_STS = 'D' AND Em_Fullname IS NOT NULL AND Em_Fullname <> '' ORDER BY Em_Fullname ASC");
+            $namesMap = [];
+            foreach ($doctorsRaw as $row) {
+                $name = trim((string) ($row->Em_Fullname ?? ''));
+                if ($name !== '' && !isset($namesMap[$name])) {
+                    $namesMap[$name] = true;
+                    $doctors[] = [
+                        'id' => (string) ($row->Em_id ?? ''),
+                        'name' => $name,
+                        'is_doctor' => true,
+                    ];
+                }
+            }
+        } catch (\Exception $e) {
+            $doctors = [];
+        }
+
         return Inertia::render('UltrasoundResult', [
             'patient' => $patient,
             'hn' => $hn,
             'dbPresets' => $dbPresets,
+            'doctors' => $doctors,
         ]);
     }
 
@@ -104,7 +124,9 @@ class PatientUltrasoundController extends Controller
         ]);
 
         $xrayResult = $request->input('xray_result', '');
-        $refDoc = $request->input('ref_doc');
+        $hasRefDoc = $request->exists('ref_doc');
+        $refDocVal = $request->input('ref_doc');
+        $refDoc = $hasRefDoc ? trim((string)($refDocVal ?? '')) : null;
         $vtNo = $request->input('vt_no');
 
         // Check if findings result is effectively empty (e.g. ['<p></p>'], [''], empty string)
@@ -142,13 +164,22 @@ class PatientUltrasoundController extends Controller
             return redirect()->back()->with('error', 'ไม่มีสิทธิ์เข้าถึงข้อมูลผู้ป่วยรายนี้');
         }
 
-        if ($refDoc !== null && $vtNo) {
-            $sql = "UPDATE opt_visit SET OP_Xray_Result = :xrayResult, OP_SEND_DR_Name = :refDoc WHERE op_hn = :hn AND VT_NO = :vtNo";
+        if ($hasRefDoc && $vtNo) {
+            $sql = "UPDATE opt_visit SET OP_Xray_Result = :xrayResult, OP_Ref_Doc = :refDoc WHERE op_hn = :hn AND VT_NO = :vtNo";
             $bindings = [
                 'xrayResult' => $xrayResult,
                 'refDoc' => $refDoc,
                 'hn' => $hn,
                 'vtNo' => $vtNo,
+            ];
+            $this->applyDoctorUpdateScope($sql, $bindings);
+            DB::statement($sql, $bindings);
+        } else if ($hasRefDoc) {
+            $sql = "UPDATE opt_visit SET OP_Xray_Result = :xrayResult, OP_Ref_Doc = :refDoc WHERE op_hn = :hn";
+            $bindings = [
+                'xrayResult' => $xrayResult,
+                'refDoc' => $refDoc,
+                'hn' => $hn,
             ];
             $this->applyDoctorUpdateScope($sql, $bindings);
             DB::statement($sql, $bindings);
@@ -250,7 +281,7 @@ class PatientUltrasoundController extends Controller
             ];
         }
 
-        // 2. Fetch All Visits for this Patient
+        // 2. Fetch All Treatment Visits for this Patient (matches Patient History)
         $visitQuery = "
             SELECT b.vt_id as VT_ID, b.vt_id, b.VT_NO, b.op_hn, b.pb_now as pb_now1, b.op_vt_date_time,
                    b.OP_CHIEF, b.OP_DIAG, b.OP_DETAIL, b.OP_SEND_DR, b.OP_SEND_DR_Name,
@@ -258,26 +289,9 @@ class PatientUltrasoundController extends Controller
                    b.OP_RR, b.OP_R, b.OP_O2SAT, b.OP_Xray_Result
             FROM opt_visit b
             WHERE b.op_hn = :hn
+            ORDER BY b.vt_id DESC
         ";
-        $visitBindings = ['hn' => $hn];
-        $this->applyDoctorScope($visitQuery, $visitBindings);
-        $visitQuery .= " ORDER BY b.vt_id DESC";
-
-        $rawVisits = DB::select($visitQuery, $visitBindings);
-
-        if (empty($rawVisits) && $this->isDoctor()) {
-            // If scoped doctor query returned empty, try unscoped to allow viewing if permitted
-            $fallbackQuery = "
-                SELECT b.vt_id as VT_ID, b.vt_id, b.VT_NO, b.op_hn, b.pb_now as pb_now1, b.op_vt_date_time,
-                       b.OP_CHIEF, b.OP_DIAG, b.OP_DETAIL, b.OP_SEND_DR, b.OP_SEND_DR_Name,
-                       b.OP_BT, b.OP_WEIGHT, b.OP_HIGHT, b.OP_HR, b.OP_BP_UP, b.OP_BP_DW,
-                       b.OP_RR, b.OP_R, b.OP_O2SAT, b.OP_Xray_Result
-                FROM opt_visit b
-                WHERE b.op_hn = :hn
-                ORDER BY b.vt_id DESC
-            ";
-            $rawVisits = DB::select($fallbackQuery, ['hn' => $hn]);
-        }
+        $rawVisits = DB::select($visitQuery, ['hn' => $hn]);
 
         // 3. Fetch All Uploaded Images
         $allImages = $this->getXrayImagesData($hn);
@@ -313,28 +327,7 @@ class PatientUltrasoundController extends Controller
             return $data;
         }, $rawVisits);
 
-        // 5. Calculate Unassigned Images
-        $validVtIds = array_filter(array_map(fn($v) => (int)($v['VT_ID'] ?? 0), $visits));
-        $validVtNos = array_filter(array_map(fn($v) => (int)($v['VT_NO'] ?? 0), $visits));
-
-        $unassignedXrayImages = [];
-        foreach ($allImages as $img) {
-            $imgVtId = isset($img['vt_id']) && $img['vt_id'] !== '' ? (int) $img['vt_id'] : null;
-            $imgVtNo = isset($img['vt_no']) && $img['vt_no'] !== '' ? (int) $img['vt_no'] : null;
-
-            $isAssigned = false;
-            if ($imgVtId && in_array($imgVtId, $validVtIds, true)) {
-                $isAssigned = true;
-            } elseif (!$imgVtId && $imgVtNo && in_array($imgVtNo, $validVtNos, true)) {
-                $isAssigned = true;
-            }
-
-            if (!$isAssigned) {
-                $unassignedXrayImages[] = $img;
-            }
-        }
-
-        // 6. Set Active / Default Visit
+        // 5. Set Active / Default Visit
         $activeVisit = null;
         if (!empty($vtId)) {
             foreach ($visits as $v) {
@@ -369,7 +362,6 @@ class PatientUltrasoundController extends Controller
             'patient' => $patient,
             'visits' => $visits,
             'allImages' => array_reverse($allImages),
-            'unassignedXrayImages' => array_reverse($unassignedXrayImages),
             'defaultVtNo' => $activeVisit['VT_NO'] ?? null,
             'defaultVtId' => $activeVisit['VT_ID'] ?? null,
             'hn' => $hn,
@@ -425,7 +417,13 @@ class PatientUltrasoundController extends Controller
 
         if ($request->hasFile('images')) {
             foreach ($request->file('images') as $file) {
-                $filename = time() . '_' . rand(100, 999) . '_' . str_replace(' ', '_', $file->getClientOriginalName());
+                $originalName = $file->getClientOriginalName();
+                $baseName = pathinfo($originalName, PATHINFO_FILENAME);
+                $extension = $file->getClientOriginalExtension() ?: pathinfo($originalName, PATHINFO_EXTENSION);
+                $cleanBaseName = str_replace([' ', '/', '\\', ':', '*', '?', '"', '<', '>', '|'], '_', $baseName);
+                $timestampStr = date('dmYHis');
+                $randDigits = rand(100, 999);
+                $filename = "{$cleanBaseName}_{$timestampStr}_{$randDigits}" . ($extension ? ".{$extension}" : '');
                 $file->move($uploadDir, $filename);
 
                 // Save metadata
@@ -462,6 +460,9 @@ class PatientUltrasoundController extends Controller
                 }
             }
         }
+
+        // Sync OP_Xray_Sts for the target visit or all visits
+        $this->syncVisitXrayStatus($hn, !empty($vtId) ? (int) $vtId : null);
 
         if ($request->wantsJson() || $request->ajax()) {
             return response()->json([
@@ -503,6 +504,8 @@ class PatientUltrasoundController extends Controller
             return redirect()->back()->with('error', 'ไม่พบไฟล์ที่ต้องการลบ');
         }
 
+        $affectedVtIds = [];
+
         foreach ($filenames as $filename) {
             $cleanName = str_replace('\\', '/', trim((string)$filename));
             $filePath = public_path("uploads/xray/{$hn}/" . ltrim($cleanName, '/'));
@@ -514,6 +517,9 @@ class PatientUltrasoundController extends Controller
                 foreach ($allImages as $img) {
                     if (basename($img['filename']) === $base || $img['filename'] === $cleanName) {
                         $filePath = $img['full_path'];
+                        if (!empty($img['vt_id'])) {
+                            $affectedVtIds[(int)$img['vt_id']] = true;
+                        }
                         break;
                     }
                 }
@@ -522,10 +528,18 @@ class PatientUltrasoundController extends Controller
             if (file_exists($filePath)) {
                 $jsonPath = $filePath . '.json';
                 $dir = dirname($filePath);
-                unlink($filePath);
+                $dirName = basename($dir);
+                if (is_numeric($dirName)) {
+                    $affectedVtIds[(int)$dirName] = true;
+                }
                 if (file_exists($jsonPath)) {
+                    $meta = json_decode(file_get_contents($jsonPath), true);
+                    if (!empty($meta['vt_id'])) {
+                        $affectedVtIds[(int)$meta['vt_id']] = true;
+                    }
                     unlink($jsonPath);
                 }
+                unlink($filePath);
                 // If subfolder is empty, clean it up
                 if ($dir !== public_path("uploads/xray/{$hn}") && is_dir($dir)) {
                     $remaining = array_diff(scandir($dir), ['.', '..']);
@@ -534,6 +548,15 @@ class PatientUltrasoundController extends Controller
                     }
                 }
             }
+        }
+
+        // Sync OP_Xray_Sts for all affected visits (or all visits of patient if unknown)
+        if (!empty($affectedVtIds)) {
+            foreach (array_keys($affectedVtIds) as $affectedVtId) {
+                $this->syncVisitXrayStatus($hn, (int) $affectedVtId);
+            }
+        } else {
+            $this->syncVisitXrayStatus($hn);
         }
 
         if ($request->wantsJson() || $request->ajax()) {
@@ -545,6 +568,7 @@ class PatientUltrasoundController extends Controller
 
         return redirect()->back()->with('success', 'ลบรูปภาพ X-Ray เรียบร้อยแล้ว');
     }
+
 
     /**
      * Get all X-ray / Ultrasound presets from PHM_XRAY.
@@ -585,7 +609,7 @@ class PatientUltrasoundController extends Controller
     public function storePreset(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'required|string|max:200',
             'result' => 'required|string',
         ]);
 
@@ -593,29 +617,19 @@ class PatientUltrasoundController extends Controller
         $result = trim((string) $request->input('result'));
 
         try {
-            $insertedId = null;
-            try {
-                $insertedId = DB::table('PHM_XRAY')->insertGetId([
-                    'PH_Xray_Name' => $name,
-                    'PH_Xray_Result' => $result,
-                ], 'PH_Xray_ID');
-            } catch (\Throwable $e) {
-                DB::table('PHM_XRAY')->insert([
-                    'PH_Xray_Name' => $name,
-                    'PH_Xray_Result' => $result,
-                ]);
-            }
+            // Explicitly insert only into PH_Xray_Name and PH_Xray_Result (PH_Xray_ID is auto-generated Identity)
+            DB::table('PHM_XRAY')->insert([
+                'PH_Xray_Name' => $name,
+                'PH_Xray_Result' => $result,
+            ]);
 
-            if (!$insertedId) {
-                $latest = DB::table('PHM_XRAY')
-                    ->where('PH_Xray_Name', $name)
-                    ->orderBy('PH_Xray_ID', 'desc')
-                    ->first();
-                $insertedId = $latest?->PH_Xray_ID ?? time();
-            }
+            $latest = DB::table('PHM_XRAY')
+                ->where('PH_Xray_Name', $name)
+                ->orderBy('PH_Xray_ID', 'desc')
+                ->first();
 
             $newPreset = [
-                'id' => (string) $insertedId,
+                'id' => (string) ($latest?->PH_Xray_ID ?? time()),
                 'label' => $name,
                 'text' => $result,
             ];
@@ -639,7 +653,7 @@ class PatientUltrasoundController extends Controller
     public function updatePreset(Request $request, string|int $id)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
+            'name' => 'required|string|max:200',
             'result' => 'required|string',
         ]);
 

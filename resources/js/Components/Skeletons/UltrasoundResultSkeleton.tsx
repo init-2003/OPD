@@ -4,7 +4,7 @@ import { Card, CardHeader, CardContent } from '@/Components/ui/card';
 
 export default function UltrasoundResultSkeleton() {
     return (
-        <div className="min-h-[calc(100vh-65px)] flex flex-col select-none pointer-events-none">
+        <div className="min-h-[calc(100vh-65px)] flex flex-col select-none pointer-events-none animate-in fade-in duration-200">
 
             {/* Top Full-Width Floating Toolbar across 100% of the screen */}
             <div className="px-3.5 pt-3 pb-1.5 shrink-0 z-20 w-full overflow-hidden">
@@ -26,7 +26,7 @@ export default function UltrasoundResultSkeleton() {
                         <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
 
                         {/* B / I / U Group */}
-                        <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80">
+                        <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80 shrink-0">
                             <Skeleton className="h-7 w-7 rounded-lg" />
                             <Skeleton className="h-7 w-7 rounded-lg" />
                             <Skeleton className="h-7 w-7 rounded-lg" />
@@ -37,7 +37,7 @@ export default function UltrasoundResultSkeleton() {
                             <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
 
                             {/* Undo / Redo */}
-                            <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80">
+                            <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80 shrink-0">
                                 <Skeleton className="h-7 w-7 rounded-lg" />
                                 <Skeleton className="h-7 w-7 rounded-lg" />
                             </div>
@@ -50,7 +50,7 @@ export default function UltrasoundResultSkeleton() {
                             <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
 
                             {/* H1 / H2 */}
-                            <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80">
+                            <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80 shrink-0">
                                 <Skeleton className="h-7 w-7 rounded-lg" />
                                 <Skeleton className="h-7 w-7 rounded-lg" />
                             </div>
@@ -58,7 +58,7 @@ export default function UltrasoundResultSkeleton() {
                             <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
 
                             {/* Lists */}
-                            <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80">
+                            <div className="flex items-center gap-0.5 bg-slate-100/90 rounded-xl p-0.5 border border-slate-200/80 shrink-0">
                                 <Skeleton className="h-7 w-7 rounded-lg" />
                                 <Skeleton className="h-7 w-7 rounded-lg" />
                             </div>
@@ -75,14 +75,21 @@ export default function UltrasoundResultSkeleton() {
                         </div>
                     </div>
 
+                    <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
+
+                    {/* Ref Doc Button */}
+                    <Skeleton className="h-8 w-24 rounded-xl" />
+
+                    <div className="h-4 w-px bg-slate-300/80 mx-0.5 shrink-0" />
+
                     {/* Right Zoom Group & Action Buttons */}
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                         {/* Zoom Controls */}
-                        <div className="flex items-center gap-1 bg-slate-100/90 border border-slate-200/80 rounded-xl p-0.5">
+                        <div className="flex items-center gap-0.5 bg-slate-100/90 border border-slate-200/80 rounded-xl p-0.5 shrink-0">
                             <Skeleton className="h-7 w-7 rounded-lg" />
-                            <Skeleton className="h-4 w-10 mx-1" />
+                            <Skeleton className="h-3.5 w-8 mx-1" />
                             <Skeleton className="h-7 w-7 rounded-lg" />
-                            <Skeleton className="h-7 w-9 rounded-lg" />
+                            <Skeleton className="h-7 w-8 rounded-lg" />
                         </div>
 
                         {/* Edit Button */}
@@ -147,7 +154,8 @@ export default function UltrasoundResultSkeleton() {
                             {/* Vital Signs Grid (8 boxes) */}
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
-                                    <Skeleton className="h-4 w-48" />
+                                    <Skeleton className="h-4 w-44" />
+                                    <Skeleton className="h-6 w-18 rounded-full" />
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     {/* BT */}

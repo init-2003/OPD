@@ -52,7 +52,39 @@ test('users can logout', function () {
     $response = $this->actingAs($user)->post('/logout');
 
     $this->assertGuest();
-    $response->assertRedirect('/');
+    $response->assertRedirect(route('login'));
 });
+
+test('users with Sts = User and Degree = 1 can not authenticate', function () {
+    $user = User::factory()->create([
+        'Sts' => 'User',
+        'Degree' => 1,
+    ]);
+
+    $response = $this->post('/login', [
+        'PB_user' => $user->PB_user,
+        'password' => 'password',
+    ]);
+
+    $this->assertGuest();
+    $response->assertSessionHasErrors(['PB_user']);
+});
+
+test('users with Sts = Administrator but Degree != 4 can not authenticate', function () {
+    $user = User::factory()->create([
+        'Sts' => 'Administrator',
+        'Degree' => 1,
+    ]);
+
+    $response = $this->post('/login', [
+        'PB_user' => $user->PB_user,
+        'password' => 'password',
+    ]);
+
+    $this->assertGuest();
+    $response->assertSessionHasErrors(['PB_user']);
+});
+
+
 
 

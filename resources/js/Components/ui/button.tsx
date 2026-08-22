@@ -10,6 +10,8 @@ const buttonVariants = cva(
       variant: {
         default:
           "liquid-glass-btn-primary text-white",
+        dark:
+          "liquid-glass-btn-dark text-white",
         destructive:
           "bg-rose-600 hover:bg-rose-700 text-white shadow-sm shadow-rose-600/25 active:scale-95",
         outline:

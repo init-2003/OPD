@@ -37,18 +37,23 @@ import {
     Wind,
     Loader2
 } from 'lucide-react';
-import { formatDateGregorian, formatVitalValue, cleanDecimals } from '@/lib/utils';
+import { formatDateGregorian, formatVitalValue, cleanDecimals, formatPatientAge, formatPatientSex } from '@/lib/utils';
+
 
 interface PatientHistoryProps {
     patient: {
         op_hn?: string;
         fullname?: string;
         formatted_date?: string;
+        formatted_age?: string;
+        op_sex?: string;
         Image_PT?: string | null;
+        [key: string]: any;
     } | null;
     visits: PatientVisit[];
     hn: string;
 }
+
 
 export default function PatientHistory({ patient, visits = [], hn }: PatientHistoryProps) {
     const [itemsPerPage] = useState(10);
@@ -274,6 +279,8 @@ export default function PatientHistory({ patient, visits = [], hn }: PatientHist
                                             <p className="text-xs text-slate-500 font-medium">
                                                 CN: <span className="font-mono font-bold text-[#00875A]">{patient?.op_hn || hn}</span>
                                                 {' · '}
+                                                <span>อายุ {formatPatientAge(patient)} {patient?.op_sex ? `/ ${formatPatientSex(patient.op_sex)}` : ''}</span>
+                                                {' · '}
                                                 จำนวนทั้งหมด <span className="font-bold text-slate-800">{visits.length}</span> รายการ
                                             </p>
                                         </div>
@@ -347,29 +354,29 @@ export default function PatientHistory({ patient, visits = [], hn }: PatientHist
                                                                     setSelectedRow(visit);
                                                                     router.visit(route('patient.show', { hn: visit.op_hn, vt: visit.VT_NO || '', from: 'history' }));
                                                                 }}
-                                                                className={`h-[10%] cursor-pointer transition-colors duration-150 ${isSelected
-                                                                    ? 'bg-[#E8F8F2] text-[#007A4D] font-bold border-l-4 border-l-[#00875A]'
+                                                                className={`h-[10%] cursor-pointer ${isSelected
+                                                                    ? 'liquid-glass-row-selected text-white font-bold'
                                                                     : isEven
-                                                                        ? 'bg-slate-50/60 hover:bg-[#E8F8F2]/60 text-slate-800'
-                                                                        : 'bg-white hover:bg-[#E8F8F2]/60 text-slate-800'
+                                                                        ? 'bg-slate-50/60 text-slate-800 liquid-glass-row'
+                                                                        : 'bg-white text-slate-800 liquid-glass-row'
                                                                     }`}
                                                             >
-                                                                <td className={`py-2 px-3.5 text-center whitespace-nowrap font-bold text-sm border-r ${isSelected ? 'border-[#A7F3D0] text-[#007A4D]' : 'border-slate-200'}`}>
+                                                                <td className={`py-2 px-3.5 text-center whitespace-nowrap font-bold text-sm border-r ${isSelected ? 'border-white/20 text-white' : 'border-slate-200 text-slate-800'}`}>
                                                                     {visit.VT_NO || '-'}
                                                                 </td>
-                                                                <td className={`py-2 px-3.5 border-r text-sm font-medium whitespace-nowrap ${isSelected ? 'border-[#A7F3D0] text-[#007A4D]' : 'border-slate-200'}`}>
+                                                                <td className={`py-2 px-3.5 border-r text-sm font-medium whitespace-nowrap ${isSelected ? 'border-white/20 text-white' : 'border-slate-200 text-slate-700'}`}>
                                                                     {formatDateGregorian(visit.formatted_date || visit.pb_now1)}
                                                                 </td>
                                                                 <td className="py-2 px-3.5 border-r border-slate-200 text-center whitespace-nowrap">
                                                                     <div className="flex justify-center items-center">
                                                                         {hasAllergy ? (
-                                                                            <span title="มีประวัติแพ้ยา"><Pill className="h-5 w-5 text-rose-600 fill-rose-100 animate-pulse" /></span>
+                                                                            <span title="มีประวัติแพ้ยา"><Pill className={`h-5 w-5 ${isSelected ? 'text-rose-200 fill-rose-600' : 'text-rose-600 fill-rose-100'} animate-pulse`} /></span>
                                                                         ) : (
-                                                                            <span title="ไม่มีประวัติแพ้ยา"><ShieldCheck className="h-5.5 w-5.5 text-[#00875A] fill-[#E8F8F2]" /></span>
+                                                                            <span title="ไม่มีประวัติแพ้ยา"><ShieldCheck className={`h-5.5 w-5.5 ${isSelected ? 'text-white fill-emerald-800/60' : 'text-[#00875A] fill-[#E8F8F2]'}`} /></span>
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className={`py-2 px-3.5 border-r text-sm max-w-[200px] truncate ${isSelected ? 'border-[#A7F3D0] text-[#007A4D]' : 'border-slate-200 text-slate-700'}`}>
+                                                                <td className={`py-2 px-3.5 border-r text-sm max-w-[200px] truncate ${isSelected ? 'border-white/20 text-white' : 'border-slate-200 text-slate-700'}`}>
                                                                     {visit.OP_CHIEF || '-'}
                                                                 </td>
                                                             </tr>
@@ -458,8 +465,9 @@ export default function PatientHistory({ patient, visits = [], hn }: PatientHist
                         <div className="lg:col-span-5 flex flex-col min-h-0 overflow-hidden h-full">
                             <Card className="border-slate-200 shadow-sm bg-white flex-1 min-h-0 flex flex-col overflow-hidden h-full">
                                 <CardHeader className="p-2.5 sm:p-3 border-b border-slate-200 bg-slate-50 shrink-0">
-                                    <CardTitle className="text-base font-bold text-slate-800">
-                                        ข้อมูลรายละเอียดการตรวจ (Visit Profile)
+                                    <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+                                        <UserCheck className="h-4.5 w-4.5 text-[#00875A]" />
+                                        <span>ข้อมูลรายละเอียดการตรวจ (Visit Profile)</span>
                                     </CardTitle>
                                 </CardHeader>
 
@@ -486,9 +494,21 @@ export default function PatientHistory({ patient, visits = [], hn }: PatientHist
                                             <p className="text-slate-600 font-mono text-xs sm:text-sm">
                                                 CN: <span className="font-bold text-sm text-[#00875A]">{selectedRow?.op_hn || patient?.op_hn || hn}</span>
                                             </p>
-                                            <Badge variant="outline" className="bg-white text-slate-700 text-xs px-2 py-0.5 font-medium mt-1">
-                                                Visit No: {selectedRow?.VT_NO || '-'}
-                                            </Badge>
+                                            {patient && (
+                                                <p className="text-xs text-slate-500 font-medium">
+                                                    อายุ: <span className="text-slate-700 font-medium">{formatPatientAge(patient)}</span>
+                                                </p>
+                                            )}
+                                            {patient && (
+                                                <p className="text-xs text-slate-500 font-medium">
+                                                    เพศ: <span className="text-slate-700 font-semibold">{formatPatientSex(patient.op_sex || patient.OP_SEX)}</span>
+                                                </p>
+                                            )}
+                                            <div className="pt-0.5">
+                                                <Badge variant="outline" className="bg-white text-slate-700 text-xs px-2 py-0.5 font-medium">
+                                                    Visit No: {selectedRow?.VT_NO || '-'}
+                                                </Badge>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -596,7 +616,7 @@ export default function PatientHistory({ patient, visits = [], hn }: PatientHist
                                             {/* อาการเบื้องต้น (Chief Complaint) */}
                                             <div className="p-2 liquid-glass-box rounded-xl space-y-0.5">
                                                 <span className="text-xs font-semibold text-slate-500 block flex items-center gap-1 mb-0.5 truncate">
-                                                    <FileText className="h-3.5 w-3.5 text-[#00875A]" /> อาการเบื้องต้น
+                                                    <FileText className="h-3.5 w-3.5 text-[#00875A]" /> อาการเบื้องต้น (Chief Complaint)
                                                 </span>
                                                 <span className="font-medium text-xs sm:text-sm text-slate-900 block truncate" title={selectedRow?.OP_CHIEF || selectedRow?.OP_DETAIL || '-'}>
                                                     {selectedRow?.OP_CHIEF || selectedRow?.OP_DETAIL || '-'}

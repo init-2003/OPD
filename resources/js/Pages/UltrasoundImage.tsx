@@ -65,7 +65,8 @@ import {
     Filter,
     ExternalLink,
 } from 'lucide-react';
-import { formatVitalValue, cleanDecimals, formatPatientAge } from '@/lib/utils';
+import { formatVitalValue, cleanDecimals, formatPatientAge, formatPatientSex } from '@/lib/utils';
+
 
 export interface XrayImageItem {
     id: string;
@@ -98,7 +99,6 @@ interface UltrasoundImageProps {
     patient: PatientVisit | null;
     visits?: VisitItem[];
     allImages?: XrayImageItem[];
-    unassignedXrayImages?: XrayImageItem[];
     defaultVtNo?: number | null;
     defaultVtId?: number | null;
     hn: string;
@@ -108,35 +108,32 @@ export default function UltrasoundImage({
     patient,
     visits = [],
     allImages = [],
-    unassignedXrayImages = [],
     defaultVtNo = null,
     defaultVtId = null,
     hn,
 }: UltrasoundImageProps) {
     const fromParam = new URLSearchParams(window.location.search).get('from') || '';
 
-    // Multi-select Visits State: Array of selected VT_IDs (or 'unassigned')
+    // Multi-select Visits State: Array of selected VT_IDs
     // Restores from URL query params (?vt_id=... or ?vt_ids=... or ?vt=...) and sessionStorage on refresh
-    const [selectedVtIds, setSelectedVtIds] = useState<(number | 'unassigned')[]>(() => {
+    const [selectedVtIds, setSelectedVtIds] = useState<number[]>(() => {
         if (typeof window === 'undefined') return [];
         const urlParams = new URLSearchParams(window.location.search);
         const queryVtIds = urlParams.get('vt_ids') || urlParams.get('vts');
         if (queryVtIds) {
             const parsed = queryVtIds
                 .split(',')
-                .map((s) => s.trim() === 'unassigned' ? 'unassigned' : Number(s.trim()))
-                .filter((x) => x === 'unassigned' || (!isNaN(x) && x > 0)) as (number | 'unassigned')[];
+                .map((s) => Number(s.trim()))
+                .filter((x) => !isNaN(x) && x > 0) as number[];
             if (parsed.length > 0) return parsed;
         }
         const queryVtId = urlParams.get('vt_id');
         if (queryVtId) {
-            if (queryVtId === 'unassigned') return ['unassigned'];
             const num = Number(queryVtId);
             if (!isNaN(num) && num > 0) return [num];
         }
         const queryVt = urlParams.get('vt');
         if (queryVt) {
-            if (queryVt === 'unassigned') return ['unassigned'];
             const num = Number(queryVt);
             if (!isNaN(num) && num > 0) {
                 const byId = visits.find((v) => Number(v.VT_ID) === num);
@@ -150,7 +147,7 @@ export default function UltrasoundImage({
             const saved = sessionStorage.getItem(`xray_selected_vt_ids_${hn}`) || sessionStorage.getItem(`xray_selected_vts_${hn}`);
             if (saved) {
                 const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed.filter((x: any) => typeof x === 'number');
             }
         } catch (e) { }
         if (defaultVtId !== null && defaultVtId !== undefined && Number(defaultVtId) > 0) {
@@ -198,7 +195,7 @@ export default function UltrasoundImage({
     }, [selectedVtIds, hn, visits]);
 
     // Toggle a single visit selection
-    const handleToggleVisit = (vtId: number | 'unassigned') => {
+    const handleToggleVisit = (vtId: number) => {
         setSelectedVtIds((prev) => {
             if (prev.includes(vtId)) {
                 return prev.filter((item) => item !== vtId);
@@ -210,10 +207,7 @@ export default function UltrasoundImage({
 
     // Select ALL visits
     const handleSelectAllVisits = () => {
-        const allIds: (number | 'unassigned')[] = visits.map((v) => Number(v.VT_ID));
-        if (unassignedXrayImages.length > 0) {
-            allIds.push('unassigned');
-        }
+        const allIds: number[] = visits.map((v) => Number(v.VT_ID));
         if (selectedVtIds.length === allIds.length) {
             setSelectedVtIds([]);
         } else {
@@ -222,17 +216,12 @@ export default function UltrasoundImage({
     };
 
     // Select ONLY one visit
-    const handleSelectOnlyVisit = (vtId: number | 'unassigned') => {
+    const handleSelectOnlyVisit = (vtId: number) => {
         setSelectedVtIds([vtId]);
         const url = new URL(window.location.href);
-        if (vtId === 'unassigned') {
-            url.searchParams.delete('vt_id');
-            url.searchParams.delete('vt');
-        } else {
-            url.searchParams.set('vt_id', String(vtId));
-            const v = visits.find((item) => Number(item.VT_ID) === Number(vtId));
-            if (v) url.searchParams.set('vt', String(v.VT_NO));
-        }
+        url.searchParams.set('vt_id', String(vtId));
+        const v = visits.find((item) => Number(item.VT_ID) === Number(vtId));
+        if (v) url.searchParams.set('vt', String(v.VT_NO));
         url.searchParams.delete('vt_ids');
         url.searchParams.delete('vts');
         window.history.replaceState({}, '', url.toString());
@@ -259,11 +248,33 @@ export default function UltrasoundImage({
         const first = selectedVtIds.find((item) => typeof item === 'number') as number | undefined;
         return first || defaultVtId || (visits[0]?.VT_ID ?? '');
     });
+    const [isVisitDropdownOpen, setIsVisitDropdownOpen] = useState(false);
+
+    const selectedTargetVisit = useMemo(() => {
+        return visits.find((v) => Number(v.VT_ID) === Number(uploadTargetVtId)) || visits[0];
+    }, [visits, uploadTargetVtId]);
+
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [filePreviews, setFilePreviews] = useState<{ file: File; preview: string }[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadStatusText, setUploadStatusText] = useState('กำลังอัปโหลดรูปภาพ...');
+    const [uploadDetailText, setUploadDetailText] = useState('');
     const [uploadError, setUploadError] = useState('');
+
+
+    useEffect(() => {
+        const previews = selectedFiles.map((file) => ({
+            file,
+            preview: URL.createObjectURL(file),
+        }));
+        setFilePreviews(previews);
+
+        return () => {
+            previews.forEach((p) => URL.revokeObjectURL(p.preview));
+        };
+    }, [selectedFiles]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -411,6 +422,11 @@ export default function UltrasoundImage({
     const [deletingImage, setDeletingImage] = useState<XrayImageItem | null>(null);
     const [deletingSelected, setDeletingSelected] = useState(false);
 
+    // Drag-to-Select (Swipe Multi-Select) State
+    const isDragSelectingRef = useRef<boolean>(false);
+    const dragSelectModeRef = useRef<'select' | 'deselect'>('select');
+    const lastTouchedFilenameRef = useRef<string | null>(null);
+
     // Right-Click Context Menu State
     const [contextMenu, setContextMenu] = useState<{
         isOpen: boolean;
@@ -455,6 +471,18 @@ export default function UltrasoundImage({
     const isLongPressTriggeredRef = useRef<boolean>(false);
 
     const handleTouchStart = (e: React.TouchEvent, img: XrayImageItem, visitVtId?: number, visitVtNo?: number) => {
+        if (isSelectionMode) {
+            // Drag-to-select mode on touch devices
+            const isCurrentlySelected = selectedImageFilenames.includes(img.filename);
+            dragSelectModeRef.current = isCurrentlySelected ? 'deselect' : 'select';
+            isDragSelectingRef.current = true;
+            lastTouchedFilenameRef.current = img.filename;
+            setSelectedImageFilenames((prev) =>
+                isCurrentlySelected ? prev.filter((f) => f !== img.filename) : [...prev, img.filename]
+            );
+            return;
+        }
+
         if (e.touches.length !== 1) return;
         const touch = e.touches[0];
         touchStartPosRef.current = { x: touch.clientX, y: touch.clientY };
@@ -507,6 +535,31 @@ export default function UltrasoundImage({
         }
     };
 
+    const handleCardPointerDown = (e: React.PointerEvent, img: XrayImageItem) => {
+        if (!isSelectionMode || e.button !== 0) return;
+        const isCurrentlySelected = selectedImageFilenames.includes(img.filename);
+        dragSelectModeRef.current = isCurrentlySelected ? 'deselect' : 'select';
+        isDragSelectingRef.current = true;
+        lastTouchedFilenameRef.current = img.filename;
+        setSelectedImageFilenames((prev) =>
+            isCurrentlySelected ? prev.filter((f) => f !== img.filename) : [...prev, img.filename]
+        );
+    };
+
+    const handleCardPointerEnter = (e: React.PointerEvent, img: XrayImageItem) => {
+        if (!isSelectionMode || !isDragSelectingRef.current) return;
+        if (lastTouchedFilenameRef.current === img.filename) return;
+        lastTouchedFilenameRef.current = img.filename;
+
+        if (dragSelectModeRef.current === 'select') {
+            setSelectedImageFilenames((prev) =>
+                prev.includes(img.filename) ? prev : [...prev, img.filename]
+            );
+        } else {
+            setSelectedImageFilenames((prev) => prev.filter((f) => f !== img.filename));
+        }
+    };
+
     useEffect(() => {
         if (!contextMenu.isOpen) return;
 
@@ -538,8 +591,6 @@ export default function UltrasoundImage({
         return visits.filter((v) => selectedVtIds.includes(Number(v.VT_ID)));
     }, [visits, selectedVtIds]);
 
-    const isUnassignedSelected = selectedVtIds.includes('unassigned');
-
     // Get images for a specific visit
     const getImagesForVisit = (v: VisitItem) => {
         const vVtId = Number(v.VT_ID || 0);
@@ -564,11 +615,8 @@ export default function UltrasoundImage({
         selectedVisitsList.forEach((v) => {
             list.push(...getImagesForVisit(v));
         });
-        if (isUnassignedSelected) {
-            list.push(...unassignedXrayImages);
-        }
         return list;
-    }, [selectedVisitsList, isUnassignedSelected, allImages, unassignedXrayImages]);
+    }, [selectedVisitsList, allImages]);
 
     // Automatically exit selection mode if all visible images are deleted or none available
     useEffect(() => {
@@ -634,7 +682,18 @@ export default function UltrasoundImage({
 
         setIsUploading(true);
         setUploadProgress(0);
+        setUploadStatusText(`กำลังเตรียมส่งรูปภาพ (${selectedFiles.length} รูป)...`);
+        setUploadDetailText('');
         setUploadError('');
+
+        const formatBytes = (bytes: number, decimals = 1) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        };
 
         // Find target visit object
         const targetVisit = visits.find((v) => Number(v.VT_ID) === Number(uploadTargetVtId));
@@ -648,6 +707,8 @@ export default function UltrasoundImage({
         if (targetVtId) formData.append('vt_id', String(targetVtId));
         if (targetVtNo) formData.append('vt_no', String(targetVtNo));
 
+        let processingInterval: any = null;
+
         try {
             await axios.post(
                 route('patient.ultrasound.upload.store', {
@@ -660,12 +721,44 @@ export default function UltrasoundImage({
                     headers: { 'Content-Type': 'multipart/form-data' },
                     onUploadProgress: (progressEvent) => {
                         if (progressEvent.total) {
-                            const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            const loaded = progressEvent.loaded;
+                            const total = progressEvent.total;
+                            const percent = Math.min(85, Math.round((loaded * 85) / total));
                             setUploadProgress(percent);
+                            const loadedStr = formatBytes(loaded);
+                            const totalStr = formatBytes(total);
+                            setUploadStatusText(`กำลังส่งข้อมูลรูปภาพ (${selectedFiles.length} รูป)...`);
+                            setUploadDetailText(`${loadedStr} / ${totalStr}`);
+
+                            if (loaded >= total) {
+                                setUploadStatusText('กำลังประมวลผลและบันทึกรูปภาพ...');
+                                let cur = 86;
+                                setUploadProgress(cur);
+                                if (!processingInterval) {
+                                    processingInterval = setInterval(() => {
+                                        cur = Math.min(96, cur + 2);
+                                        setUploadProgress(cur);
+                                    }, 150);
+                                }
+                            }
                         }
                     },
                 }
             );
+
+            if (processingInterval) clearInterval(processingInterval);
+            setUploadStatusText('กำลังอัปเดตรายการรูปภาพ...');
+            setUploadProgress(98);
+
+            await new Promise<void>((resolve) => {
+                router.reload({
+                    only: ['allImages', 'visits'],
+                    onFinish: () => {
+                        setUploadProgress(100);
+                        resolve();
+                    },
+                });
+            });
 
             setIsUploading(false);
             setSelectedFiles([]);
@@ -675,16 +768,16 @@ export default function UltrasoundImage({
                 setSelectedVtIds((prev) => [...prev, Number(uploadTargetVtId)]);
             }
 
-            // Refresh data in background without triggering full-page navigation or skeleton
-            router.reload({
-                only: ['allImages', 'unassignedXrayImages', 'visits'],
-            });
-
-            triggerToast('อัปโหลดรูปภาพสำเร็จ', 'อัปโหลดรูปภาพ X-Ray / Ultrasound เรียบร้อยแล้ว');
+            triggerToast('อัปโหลดรูปภาพสำเร็จ', `อัปโหลดรูปภาพ ${selectedFiles.length} รูป เรียบร้อยแล้ว`);
         } catch (err: any) {
+            if (processingInterval) clearInterval(processingInterval);
             setIsUploading(false);
             const msg = err?.response?.data?.message || err?.message || 'เกิดข้อผิดพลาดในการอัปโหลด กรุณาลองใหม่อีกครั้ง';
             setUploadError(msg);
+        } finally {
+            if (processingInterval) clearInterval(processingInterval);
+            setUploadStatusText('');
+            setUploadDetailText('');
         }
     };
 
@@ -699,7 +792,7 @@ export default function UltrasoundImage({
             setDeletingImage(null);
             setSelectedImageFilenames((prev) => prev.filter((f) => f !== targetFilename));
             router.reload({
-                only: ['allImages', 'unassignedXrayImages', 'visits'],
+                only: ['allImages', 'visits'],
             });
             triggerToast('ลบรูปภาพสำเร็จ', 'ลบรูปภาพ X-Ray / Ultrasound เรียบร้อยแล้ว');
         } catch (e) {
@@ -723,7 +816,7 @@ export default function UltrasoundImage({
                 sessionStorage.removeItem(`xray_selected_imgs_${hn}`);
             } catch (e) { }
             router.reload({
-                only: ['allImages', 'unassignedXrayImages', 'visits'],
+                only: ['allImages', 'visits'],
             });
             triggerToast('ลบรูปภาพสำเร็จ', `ลบรูปภาพทั้งหมด ${count} รูป เรียบร้อยแล้ว`);
         } catch (e) {
@@ -903,6 +996,53 @@ export default function UltrasoundImage({
         };
     }, [isDraggingImage, zoomLevel]);
 
+    // Global Drag-to-Select pointerup / touchend / touchmove listeners
+    useEffect(() => {
+        const handleGlobalPointerUp = () => {
+            isDragSelectingRef.current = false;
+            lastTouchedFilenameRef.current = null;
+        };
+
+        const handleGlobalTouchMove = (e: TouchEvent) => {
+            if (!isDragSelectingRef.current || !isSelectionMode) return;
+            if (e.touches.length === 0) return;
+            if (e.cancelable) e.preventDefault(); // Prevent scrolling while swiping across photos
+
+            const touch = e.touches[0];
+            const el = document.elementFromPoint(touch.clientX, touch.clientY);
+            const card = el?.closest('[data-img-filename]') as HTMLElement | null;
+            if (card) {
+                const filename = card.getAttribute('data-img-filename');
+                if (filename && filename !== lastTouchedFilenameRef.current) {
+                    lastTouchedFilenameRef.current = filename;
+                    if (dragSelectModeRef.current === 'select') {
+                        setSelectedImageFilenames((prev) =>
+                            prev.includes(filename) ? prev : [...prev, filename]
+                        );
+                    } else {
+                        setSelectedImageFilenames((prev) => prev.filter((f) => f !== filename));
+                    }
+                }
+            }
+        };
+
+        window.addEventListener('pointerup', handleGlobalPointerUp);
+        window.addEventListener('pointercancel', handleGlobalPointerUp);
+        window.addEventListener('mouseup', handleGlobalPointerUp);
+        window.addEventListener('touchend', handleGlobalPointerUp);
+        window.addEventListener('touchcancel', handleGlobalPointerUp);
+        window.addEventListener('touchmove', handleGlobalTouchMove, { passive: false });
+
+        return () => {
+            window.removeEventListener('pointerup', handleGlobalPointerUp);
+            window.removeEventListener('pointercancel', handleGlobalPointerUp);
+            window.removeEventListener('mouseup', handleGlobalPointerUp);
+            window.removeEventListener('touchend', handleGlobalPointerUp);
+            window.removeEventListener('touchcancel', handleGlobalPointerUp);
+            window.removeEventListener('touchmove', handleGlobalTouchMove);
+        };
+    }, [isSelectionMode]);
+
     // Selection toggle handlers
     const allVisibleFilenames = allVisibleImages.map((img) => img.filename);
 
@@ -941,6 +1081,9 @@ export default function UltrasoundImage({
         return (
             <div
                 key={img.id}
+                data-img-filename={img.filename}
+                onPointerDown={(e) => handleCardPointerDown(e, img)}
+                onPointerEnter={(e) => handleCardPointerEnter(e, img)}
                 onClick={() => {
                     // If long-press triggered the context menu, ignore the click to avoid opening lightbox
                     if (isLongPressTriggeredRef.current) {
@@ -948,7 +1091,7 @@ export default function UltrasoundImage({
                         return;
                     }
                     if (isSelectionMode) {
-                        handleToggleSelectImage(img.filename);
+                        return;
                     } else {
                         handleOpenLightbox(img);
                     }
@@ -958,7 +1101,7 @@ export default function UltrasoundImage({
                 onTouchEnd={handleTouchEnd}
                 onTouchCancel={handleTouchEnd}
                 onContextMenu={(e) => handleContextMenu(e, img, visitVtId, visitVtNo)}
-                style={{ WebkitTouchCallout: 'none' }}
+                style={{ WebkitTouchCallout: 'none', touchAction: isSelectionMode ? 'none' : 'auto' }}
                 className={`group relative aspect-square rounded-none overflow-hidden border transition-all duration-200 cursor-pointer select-none bg-slate-950 shadow-xs hover:shadow-md touch-manipulation ${isSelected
                     ? 'border-[#00875A] ring-3 ring-[#00875A] scale-[0.98]'
                     : 'border-slate-800/40 hover:border-slate-600'
@@ -994,7 +1137,7 @@ export default function UltrasoundImage({
 
     return (
         <AuthenticatedLayout>
-            <Head title={`คลังรูปภาพ X-Ray - ${patient?.fullname || hn}`} />
+            <Head title={`คลังรูปภาพ - ${patient?.fullname || hn}`} />
 
             <div className="min-h-[calc(100vh-65px)] lg:h-[calc(100vh-65px)] overflow-y-auto lg:overflow-hidden flex flex-col p-3.5 sm:p-5 w-full max-w-full animate-in fade-in slide-in-from-bottom-2 duration-300 space-y-4">
 
@@ -1029,7 +1172,7 @@ export default function UltrasoundImage({
                                 </Badge>
                                 {patient && (
                                     <span className="text-slate-500 text-xs font-medium">
-                                        อายุ {formatPatientAge(patient)} {patient?.op_sex ? `/ ${patient.op_sex}` : ''}
+                                        อายุ {formatPatientAge(patient)} {patient?.op_sex ? `/ ${formatPatientSex(patient.op_sex)}` : ''}
                                     </span>
                                 )}
                             </div>
@@ -1081,7 +1224,7 @@ export default function UltrasoundImage({
                                     >
                                         <CheckCheck className="h-3.5 w-3.5" />
                                         <span>
-                                            {selectedVtIds.length === visits.length + (unassignedXrayImages.length > 0 ? 1 : 0)
+                                            {selectedVtIds.length === visits.length
                                                 ? 'ยกเลิกการเลือกทั้งหมด'
                                                 : 'เลือกทุก Visit (Select All)'}
                                         </span>
@@ -1127,8 +1270,9 @@ export default function UltrasoundImage({
                                                             </div>
                                                             <div className="min-w-0">
                                                                 <p className="font-semibold text-slate-900 text-sm leading-tight truncate">
-                                                                    Visit #{v.VT_NO}
+                                                                    Visit No: {v.VT_NO}
                                                                 </p>
+
                                                                 <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">
                                                                     {v.formatted_date || v.pb_now1 || '-'}
                                                                 </p>
@@ -1171,46 +1315,6 @@ export default function UltrasoundImage({
                                         );
                                     })
                                 )}
-
-                                {/* Unassigned Images Section (If Any) */}
-                                {unassignedXrayImages.length > 0 && (
-                                    <div
-                                        onClick={() => handleToggleVisit('unassigned')}
-                                        className={`group rounded-2xl transition-all duration-200 cursor-pointer p-4 relative flex flex-col justify-between mt-3 backdrop-blur-xl border ${isUnassignedSelected
-                                            ? 'bg-amber-50/75 border-amber-500 ring-2 ring-amber-400/25 shadow-[0_8px_24px_rgba(217,119,6,0.12),inset_0_1.5px_2px_rgba(255,255,255,0.95)]'
-                                            : 'bg-white/80 border-white/90 border-t-white border-t-[1.5px] border-b-slate-200/60 shadow-[0_4px_16px_rgba(15,23,42,0.05),inset_0_1.5px_1.5px_rgba(255,255,255,1),inset_0_-1.5px_3px_rgba(15,23,42,0.03)] hover:bg-white/95 hover:border-slate-300/80 hover:shadow-[0_8px_24px_rgba(15,23,42,0.08),inset_0_2px_3px_rgba(255,255,255,1)] hover:scale-[1.005]'
-                                            }`}
-                                    >
-                                        <div className="flex justify-between items-start gap-2">
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <div
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleToggleVisit('unassigned');
-                                                    }}
-                                                    className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 transition-all cursor-pointer ${isUnassignedSelected
-                                                        ? 'bg-amber-600 text-white shadow-[0_2px_8px_rgba(217,119,6,0.35)]'
-                                                        : 'border-2 border-slate-300/90 bg-white/90 group-hover:border-amber-500 shadow-2xs'
-                                                        }`}
-                                                >
-                                                    {isUnassignedSelected && <Check className="h-3.5 w-3.5 stroke-[3]" />}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="font-semibold text-slate-900 text-sm leading-tight">
-                                                        รูปภาพที่ยังไม่ได้ระบุ Visit
-                                                    </p>
-                                                    <p className="text-xs text-amber-700 mt-0.5">
-                                                        รูปภาพส่วนกลางของผู้ป่วย
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <span className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap shrink-0 flex items-center gap-1 font-semibold bg-amber-100/90 text-amber-800 border border-amber-200/80 backdrop-blur-md shadow-[inset_0_1px_1px_rgba(255,255,255,0.8)]">
-                                                <Camera className="h-3 w-3 shrink-0 text-amber-700" />
-                                                <span>{unassignedXrayImages.length} รูป</span>
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
                             </CardContent>
                         </Card>
                     </div>
@@ -1244,7 +1348,7 @@ export default function UltrasoundImage({
                                             variant="outline"
                                             className="h-8.5 px-3.5 text-xs font-semibold rounded-full border-slate-300 text-slate-700 hover:bg-slate-100 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
                                         >
-                                            <CheckSquare className="h-3.5 w-3.5 text-[#00875A]" />
+                                            <CheckSquare className="h-3.5 w-3.5 text-slate-900" />
                                             <span>เลือกรูปภาพ</span>
                                         </Button>
                                     )}
@@ -1366,7 +1470,7 @@ export default function UltrasoundImage({
                                                     <div className="p-3.5 sm:p-4 bg-gradient-to-r from-[#E8F8F2]/60 to-slate-50/70 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                                         <div className="flex items-center gap-2.5 flex-wrap">
                                                             <span className="font-bold text-slate-900 text-sm sm:text-base">
-                                                                Visit #{v.VT_NO}
+                                                                Visit No: {v.VT_NO}
                                                             </span>
                                                             <span className="text-xs sm:text-sm text-slate-500 font-medium">
                                                                 วันที่: {v.formatted_date || v.pb_now1 || '-'}
@@ -1451,8 +1555,9 @@ export default function UltrasoundImage({
                                                                     </div>
                                                                     <div className="text-left">
                                                                         <p className="text-xs font-bold text-slate-800">
-                                                                            ยังไม่มีรูปภาพใน Visit #{v.VT_NO}
+                                                                            ยังไม่มีรูปภาพใน Visit No: {v.VT_NO}
                                                                         </p>
+
                                                                         <p className="text-[11px] text-slate-500">
                                                                             ลากไฟล์มาวางที่นี่ หรือคลิกเพื่ออัปโหลดรูปภาพเข้าสู่รอบตรวจนี้
                                                                         </p>
@@ -1468,34 +1573,6 @@ export default function UltrasoundImage({
                                                 </div>
                                             );
                                         })}
-
-                                        {/* Unassigned Section (If Selected) */}
-                                        {isUnassignedSelected && (
-                                            <div className="bg-white/90 border border-amber-200 rounded-2xl shadow-xs overflow-hidden">
-                                                <div className="p-3.5 sm:p-4 bg-amber-50/70 border-b border-amber-200 flex items-center justify-between gap-3">
-                                                    <div className="flex items-center gap-2">
-                                                        <FolderOpen className="h-5 w-5 text-amber-600" />
-                                                        <span className="font-bold text-sm sm:text-base text-amber-950">
-                                                            รูปภาพที่ยังไม่ได้ระบุ Visit
-                                                        </span>
-                                                        <Badge className="bg-amber-500 text-white font-bold text-xs px-2.5 py-0.5 rounded-full shrink-0 whitespace-nowrap">
-                                                            {unassignedXrayImages.length} รูป
-                                                        </Badge>
-                                                    </div>
-                                                </div>
-                                                <div className="p-2.5 sm:p-3.5">
-                                                    {unassignedXrayImages.length === 0 ? (
-                                                        <p className="text-center py-6 text-xs text-slate-400">
-                                                            ไม่มีรูปภาพส่วนกลาง
-                                                        </p>
-                                                    ) : (
-                                                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-1 sm:gap-1.5">
-                                                            {unassignedXrayImages.map((img) => renderImageCard(img))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        )}
                                     </>
                                 )}
                             </CardContent>
@@ -1522,17 +1599,83 @@ export default function UltrasoundImage({
                                 <span>รอบการตรวจ (Target Visit):</span>
                                 <span className="text-[11px] text-slate-500 font-normal">ระบุ Visit ที่ต้องการบันทึกภาพ</span>
                             </label>
-                            <select
-                                value={uploadTargetVtId}
-                                onChange={(e) => setUploadTargetVtId(e.target.value ? Number(e.target.value) : '')}
-                                className="w-full h-10 px-3.5 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl focus:border-[#00875A] focus:ring-1 focus:ring-[#00875A]/30 font-semibold text-slate-800"
-                            >
-                                {visits.map((v) => (
-                                    <option key={v.VT_ID} value={v.VT_ID}>
-                                        Visit #{v.VT_NO} - {v.formatted_date || v.pb_now1 || ''} {v.OP_SEND_DR_Name ? `(${v.OP_SEND_DR_Name})` : ''}
-                                    </option>
-                                ))}
-                            </select>
+                            <DropdownMenu open={isVisitDropdownOpen} onOpenChange={setIsVisitDropdownOpen}>
+                                <DropdownMenuTrigger asChild>
+                                    <button
+                                        type="button"
+                                        className="w-full h-11 px-3.5 bg-white/95 hover:bg-white border border-slate-300 hover:border-[#00875A] rounded-2xl focus:outline-hidden focus:ring-2 focus:ring-[#00875A]/20 shadow-xs transition-all duration-200 flex items-center justify-between group cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-2.5 min-w-0 overflow-hidden">
+                                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-bold bg-[#E8F8F2] text-[#00875A] border border-[#00875A]/20 shrink-0">
+                                                Visit No: {selectedTargetVisit?.VT_NO || '-'}
+                                            </span>
+                                            <span className="text-xs sm:text-sm font-semibold text-slate-800 truncate">
+                                                {selectedTargetVisit?.formatted_date || selectedTargetVisit?.pb_now1 || ''}
+                                            </span>
+                                            {selectedTargetVisit?.OP_SEND_DR_Name && (
+                                                <span className="text-xs text-slate-500 font-medium truncate hidden sm:inline">
+                                                    ({selectedTargetVisit.OP_SEND_DR_Name})
+                                                </span>
+                                            )}
+                                        </div>
+                                        <ChevronDown
+                                            className={`h-4.5 w-4.5 text-slate-500 group-hover:text-[#00875A] transition-transform duration-250 ease-in-out shrink-0 ${
+                                                isVisitDropdownOpen ? 'rotate-180 text-[#00875A]' : ''
+                                            }`}
+                                        />
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                    align="start"
+                                    className="w-[var(--radix-dropdown-menu-trigger-width)] max-h-64 overflow-y-auto p-1.5 rounded-2xl bg-white/95 backdrop-blur-xl border border-slate-200/90 shadow-2xl z-[99999]"
+                                >
+                                    <div className="px-2.5 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                                        <span>เลือกรอบการตรวจ (Select Visit)</span>
+                                        <span className="text-[10px] text-slate-400 font-normal">{visits.length} รายการ</span>
+                                    </div>
+                                    <DropdownMenuSeparator className="my-1 bg-slate-100" />
+                                    {visits.map((v) => {
+                                        const isSelected = Number(v.VT_ID) === Number(uploadTargetVtId || selectedTargetVisit?.VT_ID);
+                                        return (
+                                            <DropdownMenuItem
+                                                key={v.VT_ID}
+                                                onClick={() => {
+                                                    setUploadTargetVtId(Number(v.VT_ID));
+                                                    setIsVisitDropdownOpen(false);
+                                                }}
+                                                className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-150 my-0.5 ${
+                                                    isSelected
+                                                        ? 'bg-[#E8F8F2] text-[#00875A] font-bold border border-[#00875A]/25 shadow-2xs'
+                                                        : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold shrink-0 ${
+                                                        isSelected
+                                                            ? 'bg-[#00875A] text-white shadow-2xs'
+                                                            : 'bg-slate-100 text-slate-600'
+                                                    }`}>
+                                                        Visit No: {v.VT_NO || '-'}
+                                                    </span>
+                                                    <div className="flex flex-col min-w-0 text-left">
+                                                        <span className="text-xs sm:text-sm font-semibold truncate">
+                                                            {v.formatted_date || v.pb_now1 || '-'}
+                                                        </span>
+                                                        {v.OP_SEND_DR_Name && (
+                                                            <span className="text-[11px] text-slate-500 font-medium truncate">
+                                                                แพทย์: {v.OP_SEND_DR_Name}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                {isSelected && (
+                                                    <Check className="h-4 w-4 text-[#00875A] stroke-[2.5] shrink-0 ml-2" />
+                                                )}
+                                            </DropdownMenuItem>
+                                        );
+                                    })}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
 
                         {/* Drag & Drop File Zone */}
@@ -1581,25 +1724,32 @@ export default function UltrasoundImage({
                                     </button>
                                 </div>
 
-                                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                                    {selectedFiles.map((file, idx) => (
+                                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                                    {filePreviews.map((p, idx) => (
                                         <div
                                             key={idx}
-                                            className="flex items-center justify-between p-2 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                                            className="flex items-center justify-between p-2 bg-white border border-slate-200/90 rounded-xl text-xs shadow-2xs gap-2"
                                         >
-                                            <div className="flex items-center gap-2 overflow-hidden">
-                                                <FileImage className="h-4 w-4 text-[#00875A] shrink-0" />
-                                                <span className="font-semibold text-slate-800 truncate">
-                                                    {file.name}
-                                                </span>
-                                                <span className="text-slate-400 font-mono text-[11px] shrink-0">
-                                                    ({roundKb(file.size)})
-                                                </span>
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <img
+                                                    src={p.preview}
+                                                    alt={p.file.name}
+                                                    className="h-10 w-10 object-cover rounded-lg border border-slate-200 shrink-0 bg-slate-100"
+                                                />
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-slate-800 truncate text-xs">
+                                                        {p.file.name}
+                                                    </p>
+                                                    <p className="text-[10px] text-slate-500 font-mono">
+                                                        {roundKb(p.file.size)}
+                                                    </p>
+                                                </div>
                                             </div>
                                             <button
                                                 type="button"
                                                 onClick={() => handleRemoveSelectedFile(idx)}
-                                                className="text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
+                                                className="text-slate-400 hover:text-rose-600 p-1.5 transition-colors cursor-pointer rounded-lg hover:bg-rose-50 shrink-0"
+                                                title="ลบไฟล์นี้"
                                             >
                                                 <X className="h-4 w-4" />
                                             </button>
@@ -1611,18 +1761,23 @@ export default function UltrasoundImage({
 
                         {/* Upload Progress Bar */}
                         {isUploading && (
-                            <div className="space-y-1.5 rounded-2xl border border-[#A7F3D0] bg-[#E8F8F2]/60 p-3">
-                                <div className="flex justify-between items-center text-xs font-bold text-slate-700">
-                                    <span className="flex items-center gap-1.5">
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin text-[#00875A]" />
-                                        กำลังอัปโหลดรูปภาพ...
+                            <div className="space-y-2 rounded-2xl border border-[#A7F3D0] bg-[#E8F8F2]/70 p-3.5 shadow-xs animate-in fade-in">
+                                <div className="flex justify-between items-center text-xs font-bold text-slate-800">
+                                    <span className="flex items-center gap-1.5 truncate">
+                                        <Loader2 className="h-4 w-4 animate-spin text-[#00875A] shrink-0" />
+                                        <span className="truncate">{uploadStatusText || 'กำลังอัปโหลดรูปภาพ...'}</span>
                                     </span>
-                                    <span className="font-mono text-[#00875A]">{uploadProgress}%</span>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {uploadDetailText && (
+                                            <span className="font-mono text-[11px] font-medium text-slate-500">{uploadDetailText}</span>
+                                        )}
+                                        <span className="font-mono font-bold text-[#00875A]">{uploadProgress || 0}%</span>
+                                    </div>
                                 </div>
-                                <div className="h-2.5 w-full bg-white rounded-full overflow-hidden border border-slate-200">
+                                <div className="h-3 w-full bg-white rounded-full overflow-hidden border border-slate-200 shadow-inner p-0.5">
                                     <div
-                                        className="h-full bg-gradient-to-r from-[#00B377] to-[#00875A] rounded-full transition-all duration-200 ease-out"
-                                        style={{ width: `${uploadProgress}%` }}
+                                        className="h-full bg-gradient-to-r from-[#00B377] via-[#00875A] to-[#006B44] rounded-full transition-all duration-300 ease-out shadow-xs"
+                                        style={{ width: `${uploadProgress || 0}%` }}
                                     />
                                 </div>
                             </div>
@@ -1852,11 +2007,11 @@ export default function UltrasoundImage({
                     <DialogHeader>
                         <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                             <AlertCircle className="h-5 w-5 text-rose-600" />
-                            ยืนยันการลบรูปภาพ X-Ray
+                            ยืนยันการลบรูปภาพ
                         </DialogTitle>
                     </DialogHeader>
                     <div className="py-2 text-sm text-slate-600">
-                        คุณแน่ใจหรือไม่ว่าต้องการลบไฟล์ <strong className="text-slate-900">{deletingImage?.filename}</strong>? การดำเนินการนี้ไม่สามารถย้อนกลับได้
+                        คุณแน่ใจหรือไม่ว่าต้องการลบรูปนี้?
                     </div>
                     <DialogFooter className="gap-2">
                         <Button variant="outline" size="sm" onClick={() => setDeletingImage(null)}>

@@ -54,6 +54,13 @@ export type PageProps<
     auth: {
         user: User;
     };
+    flash?: {
+        success?: string | null;
+        error?: string | null;
+        login_success?: boolean | null;
+        logout_success?: boolean | null;
+        status?: string | null;
+    };
     patients?: PatientVisit[];
     selectedDate?: string;
     displayDate?: string;
@@ -62,3 +69,4 @@ export type PageProps<
         allergic: number;
     };
 };
+

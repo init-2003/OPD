@@ -20,7 +20,7 @@ import {
     DialogFooter,
 } from '@/Components/ui/dialog';
 import { Link, usePage, router } from '@inertiajs/react';
-import { PropsWithChildren, ReactNode, useState, useEffect } from 'react';
+import { PropsWithChildren, ReactNode, useState, useEffect, useRef } from 'react';
 import { LogOut, User as UserIcon, Settings, ChevronDown, ChevronRight, Menu, X, ShieldCheck, Stethoscope, Loader2, AlertCircle } from 'lucide-react';
 import NotificationBell from '@/Components/NotificationBell';
 import {
@@ -29,6 +29,8 @@ import {
     UltrasoundResultSkeleton,
     UltrasoundImageSkeleton,
     PatientHistorySkeleton,
+    SettingsSkeleton,
+    ProfileSkeleton,
 } from '@/Components/Skeletons';
 import InitialNotificationPromptModal from '@/Components/InitialNotificationPromptModal';
 
@@ -46,6 +48,43 @@ export default function Authenticated({
     const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
     const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+    // Global Toast Notification State
+    const [toastVisible, setToastVisible] = useState(false);
+    const [toastActive, setToastActive] = useState(false);
+    const [toastMessage, setToastMessage] = useState<{ title: string; desc: string }>({ title: '', desc: '' });
+    const toastTimerRef = useRef<{ hide?: NodeJS.Timeout; unmount?: NodeJS.Timeout }>({});
+
+    const triggerToast = (title: string, desc: string) => {
+        if (toastTimerRef.current.hide) clearTimeout(toastTimerRef.current.hide);
+        if (toastTimerRef.current.unmount) clearTimeout(toastTimerRef.current.unmount);
+
+        setToastMessage({ title, desc });
+        setToastVisible(true);
+        requestAnimationFrame(() => {
+            setToastActive(true);
+        });
+
+        toastTimerRef.current.hide = setTimeout(() => {
+            setToastActive(false);
+            toastTimerRef.current.unmount = setTimeout(() => {
+                setToastVisible(false);
+            }, 400);
+        }, 2800);
+    };
+
+    const flash = (pageProps as any).flash;
+
+    useEffect(() => {
+        if (flash?.login_success || flash?.success === 'เข้าสู่ระบบสำเร็จ') {
+            const userName = user?.name || user?.Em_Fullname || 'ผู้ใช้งาน';
+            triggerToast('เข้าสู่ระบบสำเร็จ', `ยินดีต้อนรับ ${userName}`);
+        } else if (flash?.success) {
+            triggerToast('สำเร็จ', String(flash.success));
+        } else if (flash?.error) {
+            triggerToast('เกิดข้อผิดพลาด', String(flash.error));
+        }
+    }, [flash]);
+
     const handleConfirmLogout = () => {
         setIsLoggingOut(true);
         router.post(route('logout'), {}, {
@@ -55,6 +94,7 @@ export default function Authenticated({
             },
         });
     };
+
 
     useEffect(() => {
         const removeStart = router.on('start', (event: any) => {
@@ -90,6 +130,12 @@ export default function Authenticated({
 
     const renderSkeleton = (target: string | null) => {
         const t = (target || '').toLowerCase();
+        if (t.includes('profile')) {
+            return <ProfileSkeleton />;
+        }
+        if (t.includes('settings')) {
+            return <SettingsSkeleton />;
+        }
         if (t.includes('ultrasound-result')) {
             return <UltrasoundResultSkeleton />;
         }
@@ -323,6 +369,27 @@ export default function Authenticated({
 
             {/* First-Time Login Notification Permission Prompt Modal */}
             <InitialNotificationPromptModal />
+
+            {/* Global Sliding 3D Liquid Glass Toast Notification */}
+            {toastVisible && (
+                <div
+                    className={`fixed bottom-7 right-7 z-[9999] pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] transform ${
+                        toastActive
+                            ? 'translate-y-0 opacity-100 scale-100'
+                            : 'translate-y-12 opacity-0 scale-95'
+                    }`}
+                >
+                    <div className="flex flex-col liquid-glass-toast text-slate-800 px-6 py-3.5 rounded-2xl sm:rounded-3xl shadow-2xl pointer-events-auto min-w-[260px] sm:min-w-[300px]">
+                        <span className="text-[15px] sm:text-base font-extrabold text-slate-900 tracking-tight">
+                            {toastMessage.title}
+                        </span>
+                        <span className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
+                            {toastMessage.desc}
+                        </span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

@@ -52,7 +52,8 @@ import {
     Stethoscope,
     Check,
 } from 'lucide-react';
-import { formatDateGregorian, formatVitalValue, cleanDecimals, cleanProcValue, formatPatientAge } from '@/lib/utils';
+import { formatDateGregorian, formatVitalValue, cleanDecimals, cleanProcValue, formatPatientAge, formatPatientSex } from '@/lib/utils';
+
 import PatientVitalsModal from '@/Components/PatientVitalsModal';
 
 export default function Dashboard({
@@ -114,6 +115,30 @@ export default function Dashboard({
     const [showAllergyDetails, setShowAllergyDetails] = useState(false);
     const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
 
+    // Bottom-Right 3D Liquid Glass Toast State
+    const [toastVisible, setToastVisible] = useState(false);
+    const [toastActive, setToastActive] = useState(false);
+    const [toastMessage, setToastMessage] = useState<{ title: string; desc: string }>({ title: '', desc: '' });
+    const toastTimerRef = useRef<{ hide?: NodeJS.Timeout; unmount?: NodeJS.Timeout }>({});
+
+    const triggerToast = (title: string, desc: string) => {
+        if (toastTimerRef.current.hide) clearTimeout(toastTimerRef.current.hide);
+        if (toastTimerRef.current.unmount) clearTimeout(toastTimerRef.current.unmount);
+
+        setToastMessage({ title, desc });
+        setToastVisible(true);
+        requestAnimationFrame(() => {
+            setToastActive(true);
+        });
+
+        toastTimerRef.current.hide = setTimeout(() => {
+            setToastActive(false);
+            toastTimerRef.current.unmount = setTimeout(() => {
+                setToastVisible(false);
+            }, 400);
+        }, 2800);
+    };
+
     const procForm = useForm({
         vt_no: selectedRow?.VT_NO || '',
         op_proc: cleanProcValue(selectedRow?.OP_PROC),
@@ -137,9 +162,11 @@ export default function Dashboard({
             onSuccess: () => {
                 setIsProcModalOpen(false);
                 setSelectedRow((prev) => prev ? { ...prev, OP_PROC: procForm.data.op_proc } : null);
+                triggerToast('บันทึกหัตถการสำเร็จ', 'บันทึกข้อมูลหัตถการเรียบร้อยแล้ว');
             },
         });
     };
+
 
     const handleNavigateToPatient = () => {
         if (!selectedRow) return;
@@ -201,7 +228,7 @@ export default function Dashboard({
             const currentVt = String(selectedRow.VT_NO || '');
             const matchingPatient = filteredPatients.find(
                 (p) => (p.op_hn === currentHn || (p as any).OP_HN === currentHn) &&
-                       (!currentVt || String(p.VT_NO || '') === currentVt)
+                    (!currentVt || String(p.VT_NO || '') === currentVt)
             );
 
             if (matchingPatient) {
@@ -238,7 +265,7 @@ export default function Dashboard({
             const currentVt = String(selectedRow.VT_NO || '');
             const foundIdx = filteredPatients.findIndex(
                 (p) => (p.op_hn === currentHn || (p as any).OP_HN === currentHn) &&
-                       (!currentVt || String(p.VT_NO || '') === currentVt)
+                    (!currentVt || String(p.VT_NO || '') === currentVt)
             );
             if (foundIdx >= 0) {
                 const targetPage = Math.floor(foundIdx / itemsPerPage) + 1;
@@ -285,7 +312,7 @@ export default function Dashboard({
 
     return (
         <AuthenticatedLayout>
-            <Head title="OPD Dashboard" />
+            <Head title="แดชบอร์ด" />
 
             <div className="p-3.5 sm:p-5 flex-1 min-h-0 overflow-y-auto lg:overflow-hidden flex flex-col">
                 <div className="w-full max-w-full space-y-4 flex flex-col min-h-0 flex-1 lg:overflow-hidden">
@@ -346,11 +373,10 @@ export default function Dashboard({
                                         <div className="relative inline-flex items-center p-1 bg-slate-200/70 rounded-full border border-slate-300/50 shadow-inner">
                                             {/* Sliding Pill Background Indicator */}
                                             <div
-                                                className={`absolute top-1 bottom-1 rounded-full liquid-glass-btn-primary shadow-sm pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-                                                    filterDate === 'all'
+                                                className={`absolute top-1 bottom-1 rounded-full liquid-glass-btn-primary shadow-sm pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${filterDate === 'all'
                                                         ? 'left-[150px] w-[76px]'
                                                         : 'left-1 w-[146px]'
-                                                }`}
+                                                    }`}
                                             />
 
                                             <DatePicker
@@ -361,11 +387,10 @@ export default function Dashboard({
 
                                             <button
                                                 type="button"
-                                                className={`relative z-10 h-9 w-[76px] text-xs sm:text-sm font-bold rounded-full flex items-center justify-center transition-colors duration-200 cursor-pointer select-none bg-transparent ${
-                                                    filterDate === 'all'
+                                                className={`relative z-10 h-9 w-[76px] text-xs sm:text-sm font-bold rounded-full flex items-center justify-center transition-colors duration-200 cursor-pointer select-none bg-transparent ${filterDate === 'all'
                                                         ? 'text-white'
                                                         : 'text-slate-700 hover:text-[#00875A]'
-                                                }`}
+                                                    }`}
                                                 onClick={() => {
                                                     setSelectedRow(null);
                                                     setFilterDate('all');
@@ -532,40 +557,38 @@ export default function Dashboard({
                                                         return (
                                                             <tr
                                                                 key={`${patient.op_hn}-${patient.VT_NO || index}`}
-                                                                onClick={() => {
-                                                                    handleSelectRow(patient);
-                                                                }}
+                                                                onClick={() => handleSelectRow(patient)}
                                                                 onDoubleClick={() => {
                                                                     handleSelectRow(patient);
                                                                     router.visit(route('patient.show', { hn: patient.op_hn, vt: patient.VT_NO || '' }));
                                                                 }}
-                                                                className={`h-[10%] cursor-pointer transition-colors duration-150 ${isSelected
-                                                                    ? 'bg-[#E8F8F2] text-[#004D31] font-bold border-l-4 border-l-[#00875A]'
+                                                                className={`h-[10%] cursor-pointer ${isSelected
+                                                                    ? 'liquid-glass-row-selected text-white font-bold'
                                                                     : isEven
-                                                                        ? 'bg-slate-50/60 hover:bg-[#E8F8F2]/60 text-slate-800'
-                                                                        : 'bg-white hover:bg-[#E8F8F2]/60 text-slate-800'
+                                                                        ? 'bg-slate-50/60 text-slate-800 liquid-glass-row'
+                                                                        : 'bg-white text-slate-800 liquid-glass-row'
                                                                     }`}
                                                             >
-                                                                <td className={`py-2 px-3 text-center whitespace-nowrap font-bold text-sm border-r ${isSelected ? 'border-[#A7F3D0] text-[#004D31]' : 'border-slate-200'}`}>
+                                                                <td className={`py-2 px-3 text-center whitespace-nowrap font-bold text-sm border-r ${isSelected ? 'border-white/20 text-white' : 'border-slate-200'}`}>
                                                                     {patient.VT_NO || ((validCurrentPage - 1) * itemsPerPage + index + 1)}
                                                                 </td>
-                                                                <td className={`py-2 px-3 text-center whitespace-nowrap border-r font-mono text-sm font-bold ${isSelected ? 'border-[#A7F3D0] text-[#004D31]' : 'border-slate-200'}`}>
+                                                                <td className={`py-2 px-3 text-center whitespace-nowrap border-r font-mono text-sm font-bold ${isSelected ? 'border-white/20 text-white' : 'border-slate-200'}`}>
                                                                     {patient.op_hn}
                                                                 </td>
-                                                                <td className={`py-2 px-3.5 border-r whitespace-nowrap text-sm font-semibold ${isSelected ? 'border-[#A7F3D0] text-[#004D31]' : 'border-slate-200'}`}>
+                                                                <td className={`py-2 px-3.5 border-r whitespace-nowrap text-sm font-semibold ${isSelected ? 'border-white/20 text-white' : 'border-slate-200'}`}>
                                                                     {patient.fullname}
                                                                 </td>
-                                                                <td className={`py-2 px-3.5 border-r text-sm font-medium whitespace-nowrap ${isSelected ? 'border-[#A7F3D0] text-[#004D31]' : 'border-slate-200'}`}>
+                                                                <td className={`py-2 px-3.5 border-r text-sm font-medium whitespace-nowrap ${isSelected ? 'border-white/20 text-white' : 'border-slate-200 text-slate-700'}`}>
                                                                     {formatDateGregorian(patient.formatted_date || patient.pb_now1)}
                                                                 </td>
-                                                                <td className={`py-2 px-2.5 text-center whitespace-nowrap border-r ${isSelected ? 'border-[#A7F3D0]' : 'border-slate-200'}`}>
+                                                                <td className={`py-2 px-2.5 text-center whitespace-nowrap border-r ${isSelected ? 'border-white/20' : 'border-slate-200'}`}>
                                                                     {pStatus === 'W' ? (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${isSelected ? 'bg-white text-purple-700 shadow-2xs' : 'bg-purple-50 text-purple-700 border border-purple-200'}`}>
                                                                             <span className="h-1.5 w-1.5 rounded-full bg-purple-600" />
                                                                             ส่งจัดยา
                                                                         </span>
                                                                     ) : (
-                                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                                                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${isSelected ? 'bg-white text-amber-800 shadow-2xs' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
                                                                             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                                                                             รอตรวจ
                                                                         </span>
@@ -574,9 +597,9 @@ export default function Dashboard({
                                                                 <td className="py-2 px-3 text-center whitespace-nowrap">
                                                                     <div className="flex justify-center items-center">
                                                                         {hasAllergy ? (
-                                                                            <span title="มีประวัติแพ้ยา"><Pill className="h-5 w-5 text-rose-600 fill-rose-100 animate-pulse" /></span>
+                                                                            <span title="มีประวัติแพ้ยา"><Pill className={`h-5 w-5 ${isSelected ? 'text-rose-200 fill-rose-600' : 'text-rose-600 fill-rose-100'} animate-pulse`} /></span>
                                                                         ) : (
-                                                                            <span title="ไม่มีประวัติแพ้ยา"><ShieldCheck className="h-5.5 w-5.5 text-[#00875A] fill-[#E8F8F2]" /></span>
+                                                                            <span title="ไม่มีประวัติแพ้ยา"><ShieldCheck className={`h-5.5 w-5.5 ${isSelected ? 'text-white fill-emerald-800/60' : 'text-[#00875A] fill-[#E8F8F2]'}`} /></span>
                                                                         )}
                                                                     </div>
                                                                 </td>
@@ -711,15 +734,20 @@ export default function Dashboard({
                                             <p className="text-slate-600 font-mono text-xs sm:text-sm">
                                                 CN: <span className="font-bold text-sm text-[#00875A]">{selectedRow?.op_hn || '-'}</span>
                                             </p>
-                                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                            {selectedRow && (
+                                                <p className="text-xs text-slate-500 font-medium">
+                                                    อายุ: <span className="text-slate-700 font-medium">{formatPatientAge(selectedRow)}</span>
+                                                </p>
+                                            )}
+                                            {selectedRow && (
+                                                <p className="text-xs text-slate-500 font-medium">
+                                                    เพศ: <span className="text-slate-700 font-semibold">{formatPatientSex(selectedRow.op_sex || selectedRow.OP_SEX)}</span>
+                                                </p>
+                                            )}
+                                            <div className="pt-0.5">
                                                 <Badge variant="outline" className="bg-white text-slate-700 text-xs px-2 py-0.5 font-medium">
                                                     Visit No: {selectedRow?.VT_NO || '-'}
                                                 </Badge>
-                                                {selectedRow && (
-                                                    <span className="text-xs text-slate-500 font-medium">
-                                                        {formatPatientAge(selectedRow)} {selectedRow.op_sex ? `/ ${selectedRow.op_sex}` : ''}
-                                                    </span>
-                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -774,10 +802,9 @@ export default function Dashboard({
                                                     type="button"
                                                     onClick={() => setIsVitalsModalOpen(true)}
                                                     size="sm"
-                                                    variant="ghost"
-                                                    className="h-6 px-2 text-[11px] font-bold text-[#007A4D] hover:bg-[#E8F8F2] rounded-full flex items-center gap-1 cursor-pointer -mr-1"
+                                                    className="h-6 px-2.5 text-[11px] font-bold liquid-glass-btn-primary text-white rounded-full flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 transition-all"
                                                 >
-                                                    <Edit3 className="h-3 w-3" />
+                                                    <Edit3 className="h-3 w-3 shrink-0" />
                                                     <span>กรอกข้อมูล</span>
                                                 </Button>
                                             )}
@@ -856,7 +883,7 @@ export default function Dashboard({
                                             {/* อาการเบื้องต้น (Chief Complaint) */}
                                             <div className="p-2 liquid-glass-box rounded-xl space-y-0.5">
                                                 <span className="text-xs font-semibold text-slate-500 block flex items-center gap-1 mb-0.5 truncate">
-                                                    <FileText className="h-3.5 w-3.5 text-[#00875A] shrink-0" /> อาการเบื้องต้น
+                                                    <FileText className="h-3.5 w-3.5 text-[#00875A] shrink-0" /> อาการเบื้องต้น (Chief Complaint)
                                                 </span>
                                                 <span className="font-medium text-xs sm:text-sm text-slate-800 block truncate" title={selectedRow?.OP_CHIEF || selectedRow?.OP_DETAIL || '-'}>
                                                     {selectedRow?.OP_CHIEF || selectedRow?.OP_DETAIL || '-'}
@@ -945,8 +972,30 @@ export default function Dashboard({
                 patient={selectedRow}
                 onSuccess={(updated) => {
                     setSelectedRow((prev) => (prev ? { ...prev, ...updated } : null));
+                    triggerToast('บันทึกสำเร็จ', 'บันทึกข้อมูลผู้ป่วยเรียบร้อยแล้ว');
                 }}
             />
+
+            {/* Bottom-Right Sliding 3D Liquid Glass Toast Notification */}
+            {toastVisible && (
+                <div
+                    className={`fixed bottom-7 right-7 z-50 pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] transform ${
+                        toastActive
+                            ? 'translate-y-0 opacity-100 scale-100'
+                            : 'translate-y-12 opacity-0 scale-95'
+                    }`}
+                >
+                    <div className="flex flex-col liquid-glass-toast text-slate-800 px-6 py-3.5 rounded-2xl sm:rounded-3xl shadow-2xl pointer-events-auto min-w-[260px] sm:min-w-[300px]">
+                        <span className="text-[15px] sm:text-base font-extrabold text-slate-900 tracking-tight">
+                            {toastMessage.title}
+                        </span>
+                        <span className="text-xs sm:text-sm text-slate-600 font-medium mt-0.5">
+                            {toastMessage.desc}
+                        </span>
+                    </div>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }
+

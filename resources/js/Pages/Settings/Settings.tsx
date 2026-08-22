@@ -19,6 +19,14 @@ import {
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Badge } from '@/Components/ui/badge';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+    DialogFooter,
+} from '@/Components/ui/dialog';
 
 export default function Settings() {
     // Detect OS & Environment
@@ -66,15 +74,24 @@ export default function Settings() {
         };
     }, []);
 
+    const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+
     const handleInstallApp = async () => {
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        if (outcome === 'accepted') {
-            setIsInstalled(true);
+        if (deferredPrompt) {
+            try {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    setIsInstalled(true);
+                }
+                setDeferredPrompt(null);
+                (window as any).__pwaInstallPrompt = null;
+            } catch (e) {
+                setIsInstallModalOpen(true);
+            }
+        } else {
+            setIsInstallModalOpen(true);
         }
-        setDeferredPrompt(null);
-        (window as any).__pwaInstallPrompt = null;
     };
 
     // Windows / System Notification state
@@ -258,7 +275,7 @@ export default function Settings() {
                                 <div>
                                     <div className="flex items-center gap-2.5 flex-wrap">
                                         <p className="font-bold text-slate-900 text-base">
-                                            เปิดใช้งานการแจ้งเตือนผู้ป่วยส่งตัวใหม่ ({osName})
+                                            เปิดใช้งานการแจ้งเตือนแบบพุช ({osName})
                                         </p>
                                         {permission === 'granted' && (
                                             <Badge variant="secondary" className="bg-[#E8F8F2] text-[#007A4D] border border-[#A7F3D0] font-bold text-xs">
@@ -271,9 +288,6 @@ export default function Settings() {
                                             </Badge>
                                         )}
                                     </div>
-                                    <p className="text-xs sm:text-sm text-slate-500 font-medium mt-0.5">
-                                        รับการแจ้งเตือนผ่านหน้าต่างป๊อปอัปและเสียงกระดิ่ง (Hospital Chime) เมื่อมีผู้ป่วยส่งตัวเข้ามาใหม่
-                                    </p>
                                 </div>
                             </div>
 
@@ -378,12 +392,12 @@ export default function Settings() {
                                 </div>
                             </div>
 
-                            {deferredPrompt && !isInstalled && (
+                            {!isInstalled && (
                                 <div className="self-end sm:self-center shrink-0">
                                     <Button
                                         type="button"
                                         onClick={handleInstallApp}
-                                        className="rounded-full liquid-glass-btn-primary text-white font-bold text-xs h-9.5 px-5 flex items-center gap-2 shadow-md cursor-pointer active:scale-95"
+                                        className="rounded-full liquid-glass-btn-primary text-white font-bold text-xs sm:text-sm h-9.5 px-5 flex items-center gap-2 shadow-md cursor-pointer active:scale-95 touch-manipulation hover:shadow-lg transition-all"
                                     >
                                         <Download className="h-4 w-4" />
                                         <span>ติดตั้งแอปบนอุปกรณ์นี้</span>
@@ -431,6 +445,73 @@ export default function Settings() {
 
                 </div>
             </div>
+
+            {/* PWA Install Guidance Dialog */}
+            <Dialog open={isInstallModalOpen} onOpenChange={setIsInstallModalOpen}>
+                <DialogContent className="sm:max-w-md rounded-3xl p-6 liquid-glass-card shadow-2xl border border-slate-200/80">
+                    <DialogHeader className="text-left space-y-2">
+                        <div className="h-12 w-12 rounded-2xl bg-[#E8F8F2] text-[#00875A] flex items-center justify-center mb-1">
+                            <Download className="h-6 w-6" />
+                        </div>
+                        <DialogTitle className="text-lg font-bold text-slate-900">
+                            วิธีติดตั้งแอปพลิเคชัน ({osName})
+                        </DialogTitle>
+                        <DialogDescription className="text-xs sm:text-sm text-slate-600 font-medium">
+                            ติดตั้งระบบ OPD เพื่อเปิดใช้งานแบบเต็มหน้าจอและเข้าถึงได้สะดวกรวดเร็ว
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-3 py-2 text-xs sm:text-sm">
+                        {isIPad || isMac ? (
+                            <div className="space-y-2.5 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80">
+                                <div className="flex items-start gap-2.5">
+                                    <span className="h-5 w-5 rounded-full bg-[#00875A] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
+                                    <p className="text-slate-700">
+                                        แตะไอคอน <strong>แชร์ (Share)</strong> ที่แถบเมนูของเบราว์เซอร์ Safari
+                                    </p>
+                                </div>
+                                <div className="flex items-start gap-2.5">
+                                    <span className="h-5 w-5 rounded-full bg-[#00875A] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
+                                    <p className="text-slate-700">
+                                        เลื่อนลงแล้วเลือก <strong>"เพิ่มไปยังหน้าจอโฮม (Add to Home Screen)"</strong>
+                                    </p>
+                                </div>
+                                <div className="flex items-start gap-2.5">
+                                    <span className="h-5 w-5 rounded-full bg-[#00875A] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">3</span>
+                                    <p className="text-slate-700">
+                                        แตะ <strong>"เพิ่ม (Add)"</strong> ที่มุมขวาบนเพื่อเสร็จสิ้น
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2.5 bg-slate-50/80 p-3.5 rounded-2xl border border-slate-200/80">
+                                <div className="flex items-start gap-2.5">
+                                    <span className="h-5 w-5 rounded-full bg-[#00875A] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">1</span>
+                                    <p className="text-slate-700">
+                                        คลิกที่ไอคอน <strong>ติดตั้ง (Install)</strong> ทางด้านขวาสุดของแถบที่อยู่เว็บ (URL Bar) ใน Google Chrome หรือ Microsoft Edge
+                                    </p>
+                                </div>
+                                <div className="flex items-start gap-2.5">
+                                    <span className="h-5 w-5 rounded-full bg-[#00875A] text-white flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">2</span>
+                                    <p className="text-slate-700">
+                                        หรือคลิกที่เมนู <strong>จุดสามจุด</strong> &gt; <strong>แอป (Apps)</strong> &gt; <strong>ติดตั้ง OPD Referral</strong>
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    <DialogFooter className="pt-2 flex justify-end">
+                        <Button
+                            type="button"
+                            onClick={() => setIsInstallModalOpen(false)}
+                            className="rounded-full liquid-glass-btn-primary text-white px-6 font-bold text-xs h-9"
+                        >
+                            เข้าใจแล้ว
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </AuthenticatedLayout>
     );
 }

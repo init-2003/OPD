@@ -79,16 +79,40 @@ class PatientController extends Controller
             $patient = $data;
         }
 
-        $visitVtId = (int) ($patient['VT_ID'] ?? 0);
-        $xrayImages = $this->getXrayImagesData($hn);
-        $xrayImageCount = $visitVtId
-            ? count(array_filter($xrayImages, fn($img) => ($img['vt_id'] ?? null) === $visitVtId))
-            : count($xrayImages);
+        $visitVtId = (int) ($patient['VT_ID'] ?? $patient['vt_id'] ?? 0);
+        $visitVtNo = (int) ($patient['VT_NO'] ?? $patient['vt_no'] ?? 0);
+        $allXrayImages = $this->getXrayImagesData($hn);
+
+        $visitImages = array_values(array_filter($allXrayImages, function ($img) use ($visitVtId, $visitVtNo) {
+            $imgVtId = isset($img['vt_id']) && $img['vt_id'] !== '' ? (int) $img['vt_id'] : null;
+            $imgVtNo = isset($img['vt_no']) && $img['vt_no'] !== '' ? (int) $img['vt_no'] : null;
+            if ($visitVtId && $imgVtId && $imgVtId === $visitVtId) return true;
+            if (!$imgVtId && $visitVtNo && $imgVtNo && $imgVtNo === $visitVtNo) return true;
+            return false;
+        }));
+
+        $xrayImageCount = count($visitImages);
+
+        $doctors = DB::select("
+            SELECT Em_id, Em_Fullname, EMP_STS
+            FROM Create_User 
+            WHERE EMP_STS = 'D' AND Em_Fullname IS NOT NULL AND Em_Fullname <> ''
+            ORDER BY Em_Fullname ASC
+        ");
+        $doctorList = array_map(function ($doc) {
+            return [
+                'id' => (string) ($doc->Em_id ?? ''),
+                'name' => trim((string) ($doc->Em_Fullname ?? '')),
+                'is_doctor' => strtoupper(trim((string) ($doc->EMP_STS ?? ''))) === 'D',
+            ];
+        }, $doctors);
 
         return Inertia::render('PatientDetail', [
             'patient' => $patient,
             'hn' => $hn,
+            'visitImages' => array_reverse($visitImages),
             'xrayImageCount' => $xrayImageCount,
+            'doctors' => $doctorList,
         ]);
     }
 
@@ -103,6 +127,8 @@ class PatientController extends Controller
                    LTRIM(RTRIM(ISNULL(a.pb_pfx_id,'') + ' ' + ISNULL(a.op_name,'') + ' ' + ISNULL(a.op_sname,''))) as fullname,
                    a.OP_ALLERGIC_STS as STS,
                    a.OP_ALLERGIC,
+                   a.OP_BIRTH as op_birth,
+                   a.OP_SEX as op_sex,
                    (SELECT TOP 1 Image_PT FROM OPM_Image WHERE OP_HN = a.op_hn) as Image_PT
             FROM opm_pt a
             WHERE a.op_hn = :hn
@@ -116,8 +142,13 @@ class PatientController extends Controller
                 'Image_PT' => !empty($patientRow->Image_PT) ? 'data:image/jpeg;base64,' . base64_encode($patientRow->Image_PT) : null,
                 'STS' => $patientRow->STS ?? '',
                 'OP_ALLERGIC' => $patientRow->OP_ALLERGIC ?? '',
+                'op_birth' => $patientRow->op_birth ?? null,
+                'op_sex' => $patientRow->op_sex ?? '',
+                'formatted_age' => $this->calculateAgeWithMonths($patientRow->op_birth ?? null),
             ];
         }
+
+
 
         // 2. Fetch treatment visit history without duplicate Image_PT binary blob
         $query = "SELECT b.vt_id as VT_ID, b.vt_id, b.VT_NO, b.op_hn, b.pb_now as pb_now1, b.op_vt_date_time, 
@@ -262,6 +293,16 @@ class PatientController extends Controller
         if ($request->has('op_o2sat')) {
             $sets[] = 'OP_O2SAT = :o2sat';
             $bindings['o2sat'] = $request->input('op_o2sat') !== null ? trim((string)$request->input('op_o2sat')) : '';
+        }
+
+        if ($request->exists('op_ref_doc')) {
+            $sets[] = 'OP_Ref_Doc = :op_ref_doc';
+            $refDocVal = trim((string)($request->input('op_ref_doc') ?? ''));
+            $bindings['op_ref_doc'] = $refDocVal;
+        } elseif ($request->exists('ref_doc')) {
+            $sets[] = 'OP_Ref_Doc = :op_ref_doc';
+            $refDocVal = trim((string)($request->input('ref_doc') ?? ''));
+            $bindings['op_ref_doc'] = $refDocVal;
         }
 
         if (!empty($sets)) {

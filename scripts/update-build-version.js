@@ -64,16 +64,17 @@ if (fs.existsSync(versionFilePath)) {
 }
 
 const isCI = !!(process.env.CI || process.env.GITHUB_ACTIONS);
-const ciRunNumber = process.env.GITHUB_RUN_NUMBER;
 const envVersion = getEnvVersion() || process.env.APP_VERSION || process.env.VITE_APP_VERSION;
 
 if (envVersion && envVersion !== versionData.version) {
     console.log(`📌 Version changed: ${versionData.version} ➔ ${envVersion} (Resetting build counter to 1)`);
     versionData.version = envVersion;
     versionData.build = 1;
-} else if (isCI && ciRunNumber) {
-    versionData.build = parseInt(ciRunNumber, 10) || 1;
+} else if (isCI) {
+    // On CI (GitHub Actions), preserve the exact build number from version.json in repo
+    versionData.build = parseInt(versionData.build, 10) || 1;
 } else {
+    // On local dev, increment build counter on each successful build
     versionData.build = (parseInt(versionData.build, 10) || 0) + 1;
 }
 

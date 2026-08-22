@@ -72,15 +72,6 @@ jobs:
 
           $updated | Set-Content .env
 
-          # Generate version.json
-          $versionMeta = @{
-            version = "${{ env.APP_VERSION }}"
-            build = "${{ github.run_number }}"
-            commit = "${{ github.sha }}"
-            date = (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-          } | ConvertTo-Json
-          Set-Content -Path version.json -Value $versionMeta
-
       - name: Install PHP Dependencies
         shell: powershell
         run: composer install --no-interaction --prefer-dist --optimize-autoloader

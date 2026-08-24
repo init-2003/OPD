@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -44,15 +46,14 @@ jobs:
           }
           $lines = Get-Content .env
           $updated = @()
-          $keys = @('APP_VERSION', 'APP_BUILD', 'VITE_APP_VERSION', 'VITE_APP_BUILD')
+          $keys = @('APP_VERSION', 'VITE_APP_VERSION')
           $found = @{}
 
           foreach ($line in $lines) {
             $matched = $false
             foreach ($k in $keys) {
               if ($line -match "^$k=") {
-                $val = if ($k -match 'VERSION') { '${{ env.APP_VERSION }}' } else { '${{ github.run_number }}' }
-                $updated += "$k=$val"
+                $updated += "$k=${{ env.APP_VERSION }}"
                 $found[$k] = $true
                 $matched = $true
                 break
@@ -65,8 +66,7 @@ jobs:
 
           foreach ($k in $keys) {
             if (-not $found[$k]) {
-              $val = if ($k -match 'VERSION') { '${{ env.APP_VERSION }}' } else { '${{ github.run_number }}' }
-              $updated += "$k=$val"
+              $updated += "$k=${{ env.APP_VERSION }}"
             }
           }
 
@@ -87,9 +87,6 @@ jobs:
 
       - name: Install NPM Dependencies & Build Frontend Assets
         shell: powershell
-        env:
-          VITE_APP_VERSION: ${{ env.APP_VERSION }}
-          VITE_APP_BUILD: ${{ github.run_number }}
         run: |
           npm.cmd ci
           npm.cmd run build
@@ -108,9 +105,11 @@ jobs:
       - name: Display Build Success Summary
         shell: powershell
         run: |
+          $buildCount = (git rev-list --count HEAD).Trim()
+          $commitHash = (git rev-parse --short HEAD).Trim()
           Write-Host "==========================================================" -ForegroundColor Green
           Write-Host "  Successfully built on Windows!" -ForegroundColor Green
-          Write-Host "  Version : v${{ env.APP_VERSION }}" -ForegroundColor Cyan
-          Write-Host "  Build   : #${{ github.run_number }}" -ForegroundColor Cyan
-          Write-Host "  Commit  : ${{ github.sha }}" -ForegroundColor Yellow
+          Write-Host "  Version : v${{ env.APP_VERSION }} (Build: $buildCount)" -ForegroundColor Cyan
+          Write-Host "  Commit  : $commitHash" -ForegroundColor Yellow
           Write-Host "==========================================================" -ForegroundColor Green
+

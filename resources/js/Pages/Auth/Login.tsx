@@ -272,8 +272,11 @@ export default function Login({
                     <p>© 2026 OPD Referral Management System</p>
                     <p className="text-slate-400 text-[11px]">ระบบจัดการเวชระเบียนและผลการตรวจทางรังสีวิทยา</p>
                     <div className="pt-1 flex items-center justify-center">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/90 text-slate-900 border border-slate-300 shadow-2xs backdrop-blur-xs font-mono">
-                            Version {pageProps?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} Build {pageProps?.app_build || import.meta.env.VITE_APP_BUILD || '1'}
+                        <span
+                            title={`Git Commit: ${(pageProps as any)?.app_commit || import.meta.env.VITE_APP_COMMIT || 'HEAD'}`}
+                            className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white/90 text-slate-900 border border-slate-300 shadow-2xs backdrop-blur-xs font-mono select-all cursor-default"
+                        >
+                            {(pageProps as any)?.app_formatted_version || `v${String((pageProps as any)?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0').replace(/^v/, '')} (Build: ${(pageProps as any)?.app_build || import.meta.env.VITE_APP_BUILD || '1'})`}
                         </span>
                     </div>
                 </div>

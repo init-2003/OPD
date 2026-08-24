@@ -24,10 +24,43 @@ function getEnvVersion() {
     return null;
 }
 
+function getGitCommitCount() {
+    const gitCommands = [
+        'git rev-list --count HEAD',
+        '"C:\\Program Files\\Git\\cmd\\git.exe" rev-list --count HEAD',
+        '"C:\\Program Files\\Git\\bin\\git.exe" rev-list --count HEAD'
+    ];
+
+    for (const cmd of gitCommands) {
+        try {
+            const output = execSync(cmd, { cwd: rootDir, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+            if (output && !isNaN(Number(output))) {
+                return parseInt(output, 10);
+            }
+        } catch (e) {
+            // Continue to next command
+        }
+    }
+
+    // Reflog fallback
+    const reflogPath = path.join(rootDir, '.git', 'logs', 'HEAD');
+    if (fs.existsSync(reflogPath)) {
+        try {
+            const lines = fs.readFileSync(reflogPath, 'utf-8').trim().split('\n').filter(Boolean);
+            if (lines.length > 0) return lines.length;
+        } catch (e) {
+            // Ignore fallback error
+        }
+    }
+
+    return 1;
+}
+
 function getGitCommit() {
     const gitCommands = [
         'git rev-parse --short HEAD',
-        '"C:\\Program Files\\Git\\cmd\\git.exe" rev-parse --short HEAD'
+        '"C:\\Program Files\\Git\\cmd\\git.exe" rev-parse --short HEAD',
+        '"C:\\Program Files\\Git\\bin\\git.exe" rev-parse --short HEAD'
     ];
 
     for (const cmd of gitCommands) {
@@ -38,7 +71,26 @@ function getGitCommit() {
             // Continue to next command
         }
     }
-    return null;
+
+    // Pure fallback from .git/HEAD
+    const headPath = path.join(rootDir, '.git', 'HEAD');
+    if (fs.existsSync(headPath)) {
+        try {
+            const headContent = fs.readFileSync(headPath, 'utf-8').trim();
+            if (headContent.startsWith('ref: ')) {
+                const refFile = path.join(rootDir, '.git', headContent.substring(5).trim());
+                if (fs.existsSync(refFile)) {
+                    return fs.readFileSync(refFile, 'utf-8').trim().substring(0, 7);
+                }
+            } else if (headContent.length >= 7) {
+                return headContent.substring(0, 7);
+            }
+        } catch (e) {
+            // Ignore fallback error
+        }
+    }
+
+    return 'unknown';
 }
 
 function formatNow() {
@@ -47,46 +99,23 @@ function formatNow() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-let versionData = {
-    version: '1.0.0',
-    build: 0,
-    last_built_at: '',
-    commit: ''
+const envVersion = getEnvVersion() || process.env.APP_VERSION || process.env.VITE_APP_VERSION || '1.0.0';
+const gitBuildCount = getGitCommitCount();
+const gitCommitHash = getGitCommit();
+
+const versionData = {
+    version: envVersion,
+    build: gitBuildCount,
+    last_built_at: formatNow(),
+    commit: gitCommitHash
 };
-
-if (fs.existsSync(versionFilePath)) {
-    try {
-        const raw = fs.readFileSync(versionFilePath, 'utf-8');
-        versionData = { ...versionData, ...JSON.parse(raw) };
-    } catch (e) {
-        console.warn('⚠️ Could not parse existing version.json, resetting.');
-    }
-}
-
-const isCI = !!(process.env.CI || process.env.GITHUB_ACTIONS);
-const envVersion = getEnvVersion() || process.env.APP_VERSION || process.env.VITE_APP_VERSION;
-
-if (envVersion && envVersion !== versionData.version) {
-    console.log(`📌 Version changed: ${versionData.version} ➔ ${envVersion} (Resetting build counter to 1)`);
-    versionData.version = envVersion;
-    versionData.build = 1;
-} else if (isCI) {
-    // On CI (GitHub Actions), preserve the exact build number from version.json in repo
-    versionData.build = parseInt(versionData.build, 10) || 1;
-} else {
-    // On local dev, increment build counter on each successful build
-    versionData.build = (parseInt(versionData.build, 10) || 0) + 1;
-}
-
-versionData.last_built_at = formatNow();
-versionData.commit = getGitCommit() || versionData.commit || 'unknown';
 
 fs.writeFileSync(versionFilePath, JSON.stringify(versionData, null, 2) + '\n', 'utf-8');
 
 console.log('\x1b[32m%s\x1b[0m', `==========================================================`);
 console.log('\x1b[32m%s\x1b[0m', `  ✔ [Build Success] Production Artifact Generated!`);
-console.log('\x1b[36m%s\x1b[0m', `  Version : ${versionData.version}`);
-console.log('\x1b[36m%s\x1b[0m', `  Build   : ${versionData.build}`);
+console.log('\x1b[36m%s\x1b[0m', `  Version : v${versionData.version} (Build: ${versionData.build})`);
 console.log('\x1b[33m%s\x1b[0m', `  Commit  : ${versionData.commit}`);
 console.log('\x1b[35m%s\x1b[0m', `  Time    : ${versionData.last_built_at}`);
 console.log('\x1b[32m%s\x1b[0m', `==========================================================`);
+

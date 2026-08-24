@@ -260,8 +260,11 @@ export default function Authenticated({
                                         <DropdownMenuSeparator className="my-1 bg-slate-100" />
                                         <div className="px-3 py-1.5 flex items-center justify-between text-[11px] text-slate-400 font-medium">
                                             <span>เวอร์ชันระบบ</span>
-                                            <span className="font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-300 shadow-2xs font-mono text-[11px]">
-                                                Version {usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} Build {usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || '1'}
+                                            <span
+                                                title={`Git Commit: ${(pageProps as any)?.app_commit || import.meta.env.VITE_APP_COMMIT || 'HEAD'}`}
+                                                className="font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-300 shadow-2xs font-mono text-[11px] select-all cursor-default"
+                                            >
+                                                {(pageProps as any)?.app_formatted_version || `v${String((pageProps as any)?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0').replace(/^v/, '')} (Build: ${(pageProps as any)?.app_build || import.meta.env.VITE_APP_BUILD || '1'})`}
                                             </span>
                                         </div>
                                     </DropdownMenuContent>
@@ -324,8 +327,11 @@ export default function Authenticated({
 
                         <div className="px-4 py-2.5 mt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
                             <span>เวอร์ชันระบบ</span>
-                            <span className="font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-300 shadow-2xs font-mono text-[11px]">
-                                Version {usePage<any>().props?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0'} Build {usePage<any>().props?.app_build || import.meta.env.VITE_APP_BUILD || '1'}
+                            <span
+                                title={`Git Commit: ${(pageProps as any)?.app_commit || import.meta.env.VITE_APP_COMMIT || 'HEAD'}`}
+                                className="font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-300 shadow-2xs font-mono text-[11px] select-all cursor-default"
+                            >
+                                {(pageProps as any)?.app_formatted_version || `v${String((pageProps as any)?.app_version || import.meta.env.VITE_APP_VERSION || '1.0.0').replace(/^v/, '')} (Build: ${(pageProps as any)?.app_build || import.meta.env.VITE_APP_BUILD || '1'})`}
                             </span>
                         </div>
                     </div>

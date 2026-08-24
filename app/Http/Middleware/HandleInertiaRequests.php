@@ -51,7 +51,8 @@ class HandleInertiaRequests extends Middleware
             'app_version' => \App\Support\AppVersion::getVersion(),
             'app_build' => \App\Support\AppVersion::getBuild(),
             'app_commit' => \App\Support\AppVersion::getCommit(),
+            'app_formatted_version' => \App\Support\AppVersion::getFormattedVersion(),
         ];
     }
-
 }
+

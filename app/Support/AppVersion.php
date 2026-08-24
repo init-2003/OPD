@@ -114,6 +114,28 @@ class AppVersion
     }
 
     /**
+     * Get formatted version string e.g. 'v1.0.0 (Build: 15)'.
+     */
+    public static function getFormattedVersion(): string
+    {
+        $version = static::getVersion();
+        $build = static::getBuild();
+
+        $vPrefix = str_starts_with($version, 'v') ? '' : 'v';
+        return "{$vPrefix}{$version} (Build: {$build})";
+    }
+
+    /**
+     * Reset cached static values.
+     */
+    public static function resetCache(): void
+    {
+        static::$cachedVersion = null;
+        static::$cachedBuild = null;
+        static::$cachedCommit = null;
+    }
+
+    /**
      * Read version metadata from version.json if present.
      */
     protected static function readVersionFile(): array
@@ -132,3 +154,4 @@ class AppVersion
         return [];
     }
 }
+

@@ -4,7 +4,11 @@
 [![Build & Deploy](https://github.com/init-2003/OPD/actions/workflows/deploy.yml/badge.svg)](https://github.com/init-2003/OPD/actions/workflows/deploy.yml)
 ![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?style=flat&logo=laravel&logoColor=white)
 ![React](https://img.shields.io/badge/React-19-61DAFB?style=flat&logo=react&logoColor=black)
+<<<<<<< HEAD
 ![TypeScript](https://img.shields.io/badge/TypeScript-7.x-3178C6?style=flat&logo=typescript&logoColor=white)
+=======
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?style=flat&logo=typescript&logoColor=white)
+>>>>>>> 756a52d0742389368ba440889206b26b30f0bc91
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=flat&logo=tailwind-css&logoColor=white)
 ![Inertia.js](https://img.shields.io/badge/Inertia.js-v2-9553E9?style=flat&logo=inertia&logoColor=white)
 

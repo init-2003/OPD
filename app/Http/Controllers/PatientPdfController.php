@@ -572,6 +572,9 @@ class PatientPdfController extends Controller
             return response("<h1>ไม่พบไฟล์รูปภาพ X-Ray สำหรับผู้ป่วยรหัส CN: " . htmlspecialchars($hn) . "</h1><p>กรุณาอัปโหลดรูปภาพ X-Ray ในหน้ารายงานก่อนพิมพ์</p>", 404);
         }
 
+        // Reverse images order to print from bottom to top (bottom-up / latest gallery images first)
+        $validImagePaths = array_reverse($validImagePaths);
+
         $defaultConfig = (new \Mpdf\Config\ConfigVariables())->getDefaults();
         $fontDirs = $defaultConfig['fontDir'];
         $defaultFontConfig = (new \Mpdf\Config\FontVariables())->getDefaults();
@@ -801,7 +804,9 @@ class PatientPdfController extends Controller
                 $sz0 = $calcRenderSize($img0, 188.0, 97.0);
                 $sz1 = $img1 ? $calcRenderSize($img1, 188.0, 97.0) : null;
 
-                $totalH = $sz0['h'] + ($sz1 ? ($sz1['h'] + $gap) : 0.0);
+                // Maintain consistent 2-slot grid height so partial pages (1 image) stay aligned in the top slot
+                $assumedImg1H = ($sz1 && $sz1['h'] > 0) ? $sz1['h'] : $sz0['h'];
+                $totalH = $sz0['h'] + $assumedImg1H + $gap;
                 $topGap = max(0.0, round(($totalBoxHeight - $totalH) / 2, 1));
 
                 $pageHtml = '
@@ -832,7 +837,9 @@ class PatientPdfController extends Controller
                 $row1H = max($sz0['h'], $sz1['h'] ?? 0);
                 $row2H = max($sz2['h'] ?? 0, $sz3['h'] ?? 0);
 
-                $totalH = $row1H + ($row2H > 0 ? ($row2H + $gapH) : 0);
+                // Use consistent 2-row grid height so partial pages (1-3 images) stay aligned at the top-left
+                $assumedRow2H = $row2H > 0 ? $row2H : $row1H;
+                $totalH = $row1H + $assumedRow2H + $gapH;
                 $topGap = max(0.0, round(($totalBoxHeight - $totalH) / 2, 1));
 
                 $pageHtml = '
@@ -882,7 +889,10 @@ class PatientPdfController extends Controller
                 $row2H = max($sz2['h'] ?? 0, $sz3['h'] ?? 0);
                 $row3H = max($sz4['h'] ?? 0, $sz5['h'] ?? 0);
 
-                $totalH = $row1H + ($row2H > 0 ? ($row2H + $gapH) : 0) + ($row3H > 0 ? ($row3H + $gapH) : 0);
+                // Use consistent 3-row grid height so partial pages (1-5 images) stay aligned at the top-left
+                $assumedRow2H = $row2H > 0 ? $row2H : $row1H;
+                $assumedRow3H = $row3H > 0 ? $row3H : ($row2H > 0 ? $row2H : $row1H);
+                $totalH = $row1H + $assumedRow2H + $assumedRow3H + (2 * $gapH);
                 $topGap = max(0.0, round(($totalBoxHeight - $totalH) / 2, 1));
 
                 $pageHtml = '

@@ -64,6 +64,8 @@ import {
     CheckCheck,
     Filter,
     ExternalLink,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import { formatVitalValue, cleanDecimals, formatPatientAge, formatPatientSex } from '@/lib/utils';
 
@@ -834,6 +836,48 @@ export default function UltrasoundImage({
             setIsNoTransition(false);
         });
     };
+
+    const activeImageIndex = useMemo(() => {
+        if (!activeImage) return -1;
+        return allVisibleImages.findIndex((img) => img.filename === activeImage.filename);
+    }, [activeImage, allVisibleImages]);
+
+    const handlePrevImage = () => {
+        if (activeImageIndex > 0) {
+            const prevImg = allVisibleImages[activeImageIndex - 1];
+            handleOpenLightbox(prevImg);
+        }
+    };
+
+    const handleNextImage = () => {
+        if (activeImageIndex >= 0 && activeImageIndex < allVisibleImages.length - 1) {
+            const nextImg = allVisibleImages[activeImageIndex + 1];
+            handleOpenLightbox(nextImg);
+        }
+    };
+
+    // Keyboard navigation for Lightbox
+    useEffect(() => {
+        if (!activeImage) return;
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            const target = e.target as HTMLElement;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                return;
+            }
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                handlePrevImage();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                handleNextImage();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [activeImage, activeImageIndex, allVisibleImages]);
 
     const handleRotate = () => {
         setIsNoTransition(false);
@@ -1828,11 +1872,16 @@ export default function UltrasoundImage({
                 <DialogContent className="sm:max-w-6xl w-[96vw] h-[92vh] max-h-[92vh] flex flex-col p-0 rounded-3xl overflow-hidden pacs-viewer-modal !bg-black !text-white shadow-2xl">
                     <DialogHeader className="p-3.5 sm:p-4 !bg-black border-none flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
                         <div className="overflow-hidden sm:pr-8">
-                            <DialogTitle className="text-sm sm:text-base font-bold !text-white truncate flex items-center gap-2">
+                            <DialogTitle className="text-sm sm:text-base font-bold !text-white truncate flex items-center gap-2 flex-wrap sm:flex-nowrap">
                                 <span className="truncate">{activeImage?.filename.split('/').pop()}</span>
-                                <Badge variant="secondary" className="!bg-slate-800 !text-slate-300 !border-slate-700 font-mono text-[10px] px-2">
+                                <Badge variant="secondary" className="!bg-slate-800 !text-slate-300 !border-slate-700 font-mono text-[10px] px-2 whitespace-nowrap shrink-0">
                                     {activeImage?.size}
                                 </Badge>
+                                {activeImageIndex >= 0 && (
+                                    <Badge className="!bg-[#00875A] !text-white font-mono text-[10px] sm:text-xs px-2.5 py-0.5 rounded-full font-bold shadow-xs whitespace-nowrap shrink-0">
+                                        รูปที่ {activeImageIndex + 1} / {allVisibleImages.length}
+                                    </Badge>
+                                )}
                             </DialogTitle>
                             <p className="text-xs text-slate-400 font-mono mt-0.5">
                                 อัปโหลดเมื่อ: {activeImage?.uploaded_at}
@@ -1857,6 +1906,48 @@ export default function UltrasoundImage({
                                 : 'เลื่อนลูกกลิ้งเมาส์ หรือใช้ 2 นิ้วขยายรูปภาพ'
                         }
                     >
+                        {/* Floating Previous (<) Button */}
+                        {allVisibleImages.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handlePrevImage();
+                                }}
+                                disabled={activeImageIndex <= 0}
+                                className={`absolute left-3 sm:left-6 top-1/2 -translate-y-1/2 z-30 h-11 w-11 sm:h-13 sm:w-13 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer select-none touch-manipulation group shadow-2xl ${
+                                    activeImageIndex <= 0
+                                        ? 'opacity-20 !bg-slate-900/40 text-slate-500 border border-white/5 cursor-not-allowed pointer-events-none'
+                                        : 'opacity-85 hover:opacity-100 bg-slate-900/80 hover:bg-slate-800/95 text-white backdrop-blur-md border border-white/20 hover:border-white/40 hover:scale-110 active:scale-95'
+                                }`}
+                                title="รูปภาพก่อนหน้า (หรือกดลูกศรซ้าย ←)"
+                                aria-label="Previous image"
+                            >
+                                <ChevronLeft className="h-6 w-6 sm:h-7 sm:w-7 group-hover:-translate-x-0.5 transition-transform" />
+                            </button>
+                        )}
+
+                        {/* Floating Next (>) Button */}
+                        {allVisibleImages.length > 1 && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleNextImage();
+                                }}
+                                disabled={activeImageIndex >= allVisibleImages.length - 1}
+                                className={`absolute right-3 sm:right-6 top-1/2 -translate-y-1/2 z-30 h-11 w-11 sm:h-13 sm:w-13 rounded-full flex items-center justify-center transition-all duration-200 cursor-pointer select-none touch-manipulation group shadow-2xl ${
+                                    activeImageIndex >= allVisibleImages.length - 1
+                                        ? 'opacity-20 !bg-slate-900/40 text-slate-500 border border-white/5 cursor-not-allowed pointer-events-none'
+                                        : 'opacity-85 hover:opacity-100 bg-slate-900/80 hover:bg-slate-800/95 text-white backdrop-blur-md border border-white/20 hover:border-white/40 hover:scale-110 active:scale-95'
+                                }`}
+                                title="รูปภาพถัดไป (หรือกดลูกศรขวา →)"
+                                aria-label="Next image"
+                            >
+                                <ChevronRight className="h-6 w-6 sm:h-7 sm:w-7 group-hover:translate-x-0.5 transition-transform" />
+                            </button>
+                        )}
+
                         {activeImage && (
                             <div
                                 className="relative h-full w-full flex items-center justify-center will-change-transform select-none touch-none"
